@@ -190,8 +190,8 @@ def _extract_email_no_tfidf(
     # ---- Module 7: ChatGPT AI (2) ----------------------------------------
     if use_gemini:
         try:
-            from src.features.gemini_analyzer import get_gemini_ml_feature
-            gemini_feats = get_gemini_ml_feature(
+            from src.features.openai_analyzer import get_openai_ml_feature
+            gemini_feats = get_openai_ml_feature(
                 subject=parsed.get("subject", ""),
                 from_address=parsed.get("from_address", ""),
                 body_text=parsed.get("body_text", ""),
@@ -708,15 +708,15 @@ class FeaturePipeline:
         # ---- Module 7: ChatGPT AI feature (2) ------------------------------
         if self.use_gemini:
             try:
-                from src.features.gemini_analyzer import get_gemini_ml_feature
-                gemini_feats = get_gemini_ml_feature(
+                from src.features.openai_analyzer import get_openai_ml_feature
+                gemini_feats = get_openai_ml_feature(
                     subject=parsed.get("subject", ""),
                     from_address=parsed.get("from_address", ""),
                     body_text=parsed.get("body_text", ""),
                     urls=urls,
                 )
             except Exception as exc:
-                log.warning(f"Gemini features failed: {exc}")
+                log.warning(f"ChatGPT features failed: {exc}")
                 gemini_feats = {"gemini_is_phishing": -1, "gemini_confidence": -1.0}
             for k, v in gemini_feats.items():
                 feature_vector.append(float(v))

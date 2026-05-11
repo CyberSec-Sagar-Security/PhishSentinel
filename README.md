@@ -144,7 +144,7 @@ phishlens/
 │   │   ├── html_features.py       # 11 HTML structural anomaly features
 │   │   ├── text_features.py       # 384-dim embeddings + TF-IDF + urgency
 │   │   ├── intelligence.py        # VirusTotal / GSB / AbuseIPDB / URLScan
-│   │   ├── openai_analyzer.py     # ChatGPT AI analysis (gpt-4o-mini)
+│   │   ├── openai_analyzer.py     # ChatGPT AI analysis (gpt-4.1-mini)
 │   │   └── pipeline.py            # Master FeaturePipeline (fit/transform)
 │   ├── detection/
 │   │   └── anomaly.py             # Isolation Forest zero-day detector
