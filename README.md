@@ -1,191 +1,260 @@
-
-# 🛡️ PhishLens — ML Phishing Email Detection System
+# 🛡️ PhishSentinel — ML Phishing Email Detection System
 
 [![CI](https://github.com/CyberSec-Sagar-Security/PhishSentinel/actions/workflows/ci.yml/badge.svg)](https://github.com/CyberSec-Sagar-Security/PhishSentinel/actions)
 [![Python 3.13](https://img.shields.io/badge/python-3.13-blue.svg)](https://www.python.org/downloads/release/python-3130/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![Code Style: Black](https://img.shields.io/badge/code%20style-black-000000.svg)](https://github.com/psf/black)
 [![Security: Bandit](https://img.shields.io/badge/security-bandit-yellow.svg)](https://bandit.readthedocs.io/)
-[![HuggingFace Spaces](https://img.shields.io/badge/🤗%20HuggingFace-Spaces-orange)](https://huggingface.co/spaces/CyberSec-Sagar-Security/PhishLens)
+[![HuggingFace Spaces](https://img.shields.io/badge/🤗%20HuggingFace-Spaces-orange)](https://huggingface.co/spaces/CyberSec-Sagar-Security/PhishSentinel)
 
-> **Portfolio Project** — B.Sc. Information Technology → MSc Cybersecurity
-> A production-ready, multi-layer phishing email detection system combining classical ML,
-> deep NLP embeddings, threat intelligence APIs, and ChatGPT AI.
+> **MSc Cybersecurity Portfolio Project — B.Sc. IT → MSc Cybersecurity**
+> A production-ready, multi-layer phishing email detection system combining
+> classical ML, deep NLP embeddings, threat intelligence APIs, and ChatGPT AI.
 >
-> **GitHub:** https://github.com/CyberSec-Sagar-Security/PhishSentinel | **Branch:** `main` | **Python:** 3.13 | **License:** MIT
+> **GitHub:** https://github.com/CyberSec-Sagar-Security/PhishSentinel &nbsp;|&nbsp; **Python:** 3.13 &nbsp;|&nbsp; **License:** MIT
 
 ---
 
-## 📋 What It Is
+## 🎯 Live Demo
 
-PhishLens detects phishing emails using a **defence-in-depth ML architecture** — eight independent
-detection layers that an adversary must simultaneously evade to successfully deliver a phishing email.
+> ⚠️ *HuggingFace Spaces deployment in progress — local demo available via Quick Start below.*
+
+![PhishSentinel Demo](docs/demo_screenshot.png)
+
+*PhishSentinel catching a professionally crafted phishing simulation email —
+ML probability 37.3%, escalated to PHISHING via VirusTotal (1 malicious hit)
+and ChatGPT AI (HIGH risk, 85% confidence). Microsoft SafeLinks URLs
+deobfuscated to reveal true malicious destination.*
+
+---
+
+## 📋 What It Does
+
+PhishSentinel detects phishing emails using a **defence-in-depth ML architecture** — eight
+independent detection layers that an adversary must simultaneously evade to deliver a
+phishing email undetected. When the ML model is uncertain, external threat intelligence
+APIs and ChatGPT AI provide independent confirmation — catching sophisticated attacks
+that evade any single detection method.
+
+**Key capabilities:**
+- 🔍 Analyses `.eml` files, pasted raw email text, or batch CSV files
+- 🔗 Deobfuscates wrapped URLs (Microsoft SafeLinks, Proofpoint, Mimecast — 9 wrapper types)
+- 🧠 Explains every verdict with SHAP + LIME dual explainability and agreement scoring
+- 🚨 Maps detections to MITRE ATT&CK techniques (T1566 family + 6 secondary techniques)
+- 📤 Exports IOCs as MISP JSON and CEF Syslog for direct SOC integration
+- 🤖 Provides ChatGPT gpt-4.1-mini narrative analysis with per-IOC verdicts
+- 🛡️ Escalates uncertain ML verdicts when threat intelligence confirms risk
 
 ---
 
 ## 🏗️ Architecture — 8-Layer Defence-in-Depth
 
 ```
-Raw Email
+Raw Email (.eml / paste / batch CSV)
     │
     ▼
-┌─────────────────────────────────────────────────────────────────────────────────┐
-│  Layer 1  │  Header Forensics          │  src/features/header_features.py  │  12 features  │
-│  Layer 2  │  URL Intelligence          │  src/features/url_features.py     │  29 features  │
-│  Layer 3  │  HTML Structural Analysis  │  src/features/html_features.py    │  11 features  │
-│  Layer 4  │  Semantic Embeddings       │  src/features/text_features.py    │ 384 features  │
-│  Layer 5  │  TF-IDF Vocabulary         │  src/features/text_features.py    │ 500 features  │
-│  Layer 6  │  Threat Intelligence APIs  │  src/features/intelligence.py     │  13 features  │
-│  Layer 7  │  Isolation Forest Anomaly  │  src/detection/anomaly.py         │   1 feature   │
-│  Layer 8  │  ChatGPT AI (optional)     │  src/features/openai_analyzer.py  │   2 features  │
-└─────────────────────────────────────────────────────────────────────────────────┘
-                         TOTAL: 961 features (fixed vector — never change without full retrain)
+┌───────────────────────────────────────────────────────────────────────────────┐
+│  Layer 1  │  Header Forensics          │  header_features.py    │  12 features │
+│  Layer 2  │  URL Intelligence          │  url_features.py       │  29 features │
+│  Layer 3  │  HTML Structural Analysis  │  html_features.py      │  11 features │
+│  Layer 4  │  Semantic Embeddings       │  text_features.py      │ 384 features │
+│  Layer 5  │  TF-IDF Vocabulary Signals │  text_features.py      │ 500 features │
+│  Layer 6  │  Threat Intelligence APIs  │  intelligence.py       │  13 features │
+│  Layer 7  │  Isolation Forest Anomaly  │  anomaly.py            │   1 feature  │
+│  Layer 8  │  ChatGPT AI (optional)     │  openai_analyzer.py    │   2 features │
+└───────────────────────────────────────────────────────────────────────────────┘
+                     TOTAL: 961 features — fixed vector, never change without retraining
     │
     ▼
-ML Ensemble (XGBoost + LightGBM + CatBoost + Random Forest + Logistic Regression)
+ML Ensemble → LightGBM · XGBoost · CatBoost · Random Forest · Logistic Regression
     │
     ▼
-SHAP + LIME Explanation + MITRE ATT&CK Mapping + IOC Export
+URL Deobfuscation → SafeLinks · Proofpoint · Mimecast · 9 wrapper types
+    │
+    ▼
+Verdict: PHISHING / LEGITIMATE / UNCERTAIN  +  Confidence %
+    │
+    ├── SHAP + LIME Explainability (dual, with agreement score)
+    ├── MITRE ATT&CK Mapping (10 techniques, confidence-scored)
+    ├── IOC Extraction (IPs · URLs · domains · attachment hashes)
+    ├── ChatGPT AI Narrative (optional, requires OPENAI_API_KEY)
+    └── IOC Export: MISP JSON · CEF Syslog · Plain Text Report
 ```
 
 ---
 
-## 🔢 Feature Vector — 961 Dimensions (Fixed)
+## 🔢 Feature Vector — 961 Dimensions (Fixed Schema)
 
 | # | Layer | Module | What Is Extracted | Count |
 |---|---|---|---|---|
-| 1 | Header Forensics | `header_features.py` | SPF/DKIM/DMARC pass/fail, From↔Reply-To mismatch, From↔Return-Path mismatch, freemail sender, timezone anomaly, X-Mailer bulk fingerprint, hop count, relay IP count, display name spoofing, MX record missing | **12** |
-| 2 | URL Intelligence | `url_features.py` | Lexical (length, entropy, special chars, TLD, subdomain depth, @ symbol, IP in URL, brand in subdomain), WHOIS (domain age, registrar age), cert transparency, homoglyph detection — per-URL min/max aggregations + URL count | **29** |
-| 3 | HTML Structure | `html_features.py` | Hidden form fields, external form actions, pixel tracking, image-only ratio, script obfuscation, data URI count, meta refresh, hidden iFrame, link text mismatch, comment ratio, DOM depth | **11** |
-| 4 | Semantic Embeddings | `text_features.py` | `all-MiniLM-L6-v2` 384-dim sentence embeddings + 8 urgency/subject signals | **384** |
-| 5 | TF-IDF Vocabulary | `text_features.py` | 500-token phishing vocabulary signal | **500** |
-| 6 | Threat Intelligence | `intelligence.py` | VirusTotal malicious count, GSB threat type, AbuseIPDB confidence score, URLScan verdict, URLhaus status, IPQS fraud score + sub-scores | **13** |
-| 7 | Anomaly Detection | `anomaly.py` | Isolation Forest score trained on legitimate emails only — detects novel zero-day campaigns not seen in training | **1** |
-| 8 | ChatGPT AI | `openai_analyzer.py` | `gemini_is_phishing` (0/1), `gemini_confidence` (0.0–1.0) — key names retained for trained model weight compatibility | **2** |
+| 1 | Header Forensics | `header_features.py` | SPF/DKIM/DMARC pass/fail, From↔Reply-To mismatch, From↔Return-Path mismatch, freemail sender, timezone anomaly, X-Mailer bulk fingerprint, hop count, relay IP count, display name spoofing | **12** |
+| 2 | URL Intelligence | `url_features.py` | Lexical analysis (length, entropy, special chars, TLD risk, subdomain depth, IP-in-URL, brand-in-subdomain), WHOIS domain age, cert transparency, homoglyph/punycode detection — per-URL aggregations | **29** |
+| 3 | HTML Structure | `html_features.py` | Hidden form fields, external form actions, tracking pixels, image-only ratio, script obfuscation, data URI count, meta refresh, hidden iFrame, link text mismatch, comment ratio | **11** |
+| 4 | Semantic Embeddings | `text_features.py` | `all-MiniLM-L6-v2` 384-dimensional sentence embeddings + 8 urgency/subject scalar signals | **384** |
+| 5 | TF-IDF Vocabulary | `text_features.py` | 500-token phishing vocabulary n-gram signal (unigrams + bigrams) | **500** |
+| 6 | Threat Intelligence | `intelligence.py` | VirusTotal malicious/suspicious counts, GSB threat type, AbuseIPDB confidence score, URLScan verdict, URLhaus status, IPQS fraud score | **13** |
+| 7 | Anomaly Detection | `anomaly.py` | Isolation Forest score trained on legitimate emails only — detects zero-day campaigns not seen in training | **1** |
+| 8 | ChatGPT AI | `openai_analyzer.py` | `is_phishing` (0/1), `confidence` (0.0–1.0) — keys retain `gemini_` prefix for trained model weight compatibility (historical artifact from Gemini → GPT migration) | **2** |
 
-> **Note on Layer 8 key names:** The dict keys `gemini_is_phishing` / `gemini_confidence` are intentionally kept as-is. They are baked into the 961-feature vector that all five trained models depend on. The analysis is now performed by ChatGPT (`openai_analyzer.py`) — the key names are a historical artifact.
+> **Layer 8 note:** During training all 412,265 emails were processed with `--no-network`.
+> Layer 8 features are always `-1` during training. At inference time, if `OPENAI_API_KEY`
+> is configured, real ChatGPT values replace the `-1` defaults.
 
 ---
 
 ## 🏆 Model Performance
 
-> All metrics on the **held-out test set of 103,067 emails** — never seen during training (stratified 80/20 split).
-> Training corpus: 412,265 emails total. Full pipeline: **21.4 minutes with GPU acceleration**.
+> All metrics on the **held-out test set of 103,067 emails** — never seen during training.
+> Stratified 80/20 split from 412,265-email corpus across 8 dataset sources.
 
-| Rank | Model | F1 | AUC-ROC | FNR | FPR | MCC | TP | TN | FP | FN |
+| Rank | Model | F1 | AUC-ROC | FNR ↓ | FPR | MCC | TP | TN | FP | FN |
 |---|---|---|---|---|---|---|---|---|---|---|
-| 🥇 1 | **LightGBM** *(primary)* | **0.9505** | **0.9941** | **5.64%** | 3.11% | **0.9143** | 41,476 | 57,272 | 1,839 | 2,480 |
+| 🥇 1 | **LightGBM** *(default)* | **0.9505** | **0.9941** | **5.64%** | 3.11% | **0.9143** | 41,476 | 57,272 | 1,839 | 2,480 |
 | 🥈 2 | XGBoost | 0.9482 | 0.9935 | 6.48% | 2.78% | 0.9109 | 41,109 | 57,468 | 1,643 | 2,847 |
 | 🥉 3 | Random Forest | 0.9436 | 0.9926 | 6.19% | 3.73% | 0.9021 | 41,234 | 56,904 | 2,207 | 2,722 |
 | 4 | CatBoost | 0.9356 | 0.9895 | 6.76% | 4.52% | 0.8880 | 40,984 | 56,438 | 2,673 | 2,972 |
 | 5 | Logistic Regression | 0.9334 | 0.9905 | 9.87% | 2.22% | 0.8886 | 39,617 | 57,801 | 1,310 | 4,339 |
 
-> **FNR = False Negative Rate** (phishing emails missed).
-> LR at 93.34% F1 — near the top — proves **feature engineering quality is the primary driver**, not model complexity.
+> **FNR = False Negative Rate** — phishing emails missed. Lower is better for a security tool.
+> LightGBM missed **2,480 out of 43,956** phishing emails in the held-out test set.
+> Logistic Regression at 93.34% F1 — near the top — demonstrates that
+> **feature engineering quality is the primary driver**, not model complexity.
 
-### ⚠️ Adversarial Stress Test (Honest Disclosure)
+### ⚠️ Adversarial Stress Test — Honest Disclosure
 
-LightGBM stress-tested with Gaussian noise injected across all 961 feature dimensions simultaneously:
+LightGBM tested with Gaussian noise injected simultaneously across all 961 feature dimensions:
 
-| Noise Level | F1 | Notes |
+| Noise Level | F1 | Context |
 |---|---|---|
 | 0% (baseline) | 0.9505 | Normal operation |
-| 5% noise | ~0.60 | Synthetic worst-case (formal benchmark pending) |
-| 10% noise | ~0.25 | Synthetic worst-case (formal benchmark pending) |
-| 20% noise | ~0.14 | Synthetic worst-case (formal benchmark pending) |
+| 5% noise | ~0.60 | Synthetic worst-case — all 961 dims perturbed simultaneously |
+| 10% noise | ~0.25 | Synthetic worst-case |
+| 20% noise | ~0.14 | Synthetic worst-case |
 
-> Real adversarial attacks manipulate specific features while leaving others unchanged — not all 961 at once. Disclosed for full transparency.
+> This is a **synthetic scenario** — real adversarial attacks manipulate specific features
+> while leaving most others unchanged. Disclosed for full transparency.
+
+---
+
+## 🔗 URL Deobfuscation
+
+Many phishing emails wrap malicious URLs inside corporate email security gateways.
+Without deobfuscation, TI tools check the **wrapper** domain (e.g. `microsoft.com`)
+and return **Clean** — completely missing the real malicious destination.
+
+PhishSentinel automatically unwraps before scanning:
+
+| Wrapper Type | Detection | Extraction |
+|---|---|---|
+| Microsoft SafeLinks | `*.safelinks.protection.outlook.com/?url=` | URL-decode `?url=` parameter |
+| Proofpoint URLDefense v2 | `urldefense.proofpoint.com/v2/url?u=` | Custom hex decode |
+| Proofpoint URLDefense v3 | `urldefense.com/v3/__<url>__` | Regex between `__` markers |
+| Google Redirect | `google.com/url?q=` | URL-decode `?q=` parameter |
+| Mimecast URL Protect | `protect-*.mimecast.com/s/` | Follow HTTP redirect |
+| Barracuda Email Security | `links.barracudanetworks.com/` | Follow HTTP redirect |
+| Cisco IronPort/ESA | `*.cisco.com/c/r/` | Follow HTTP redirect |
+| URL Shorteners | bit.ly, t.co, tinyurl.com, ow.ly, etc. | HEAD request with redirect |
+| Percent-encoding | `%XX%XX...` | Recursive `urllib.parse.unquote` |
+
+TI APIs always scan the **real destination** — never the wrapper domain.
+
+---
+
+## 🔺 Verdict Escalation
+
+When ML probability is below threshold (UNCERTAIN), PhishSentinel escalates to
+**PHISHING** based on external evidence:
+
+- VirusTotal: ≥1 malicious engine detection on any extracted URL
+- Google Safe Browsing: any URL flagged as phishing or malware
+- ChatGPT AI: verdict = phishing with confidence > 0.70
+
+This catches sophisticated emails crafted to fool ML classifiers while still leaving
+detectable traces in threat intelligence databases or AI analysis.
 
 ---
 
 ## 📊 Training Datasets
 
-| Dataset | Source | Type |
-|---|---|---|
-| CASIS | Kaggle/CASIS | Phishing + Spam |
-| Enron (Kaggle) | Kaggle | Legitimate |
-| SpamAssassin HAM | Apache | Legitimate |
-| SpamAssassin SPAM | Apache | Spam |
-| Phishing Pot | GitHub | Phishing |
-| Nigerian Fraud | Public | Phishing |
-| Nazario | Public | Phishing |
-| Ling | Public | Phishing |
-| CEAS 2008 | Public | Spam |
-| Meajor | Custom | Mixed |
-| Umbrella Top 1M | Cisco | Legitimate domain reference |
+| Source | Emails | Type | Notes |
+|---|---|---|---|
+| locuoco/biggest-spam-ham-phish | 179,776 | Phishing + Spam + Ham | Largest single source |
+| JinqiangDing/seven-phishing-email-datasets | 116,333 | Phishing | Multi-corpus, updated Apr 2026 |
+| CASIS (Kaggle) | 57,166 | Phishing + BEC | Business Email Compromise heavy |
+| Enron Email Corpus (Kaggle) | 24,033 | Legitimate | Corporate email baseline |
+| puyang2025/phish-email-datasets | 16,699 | Phishing | Recent 2025 campaigns |
+| SpamAssassin Public Corpus | 6,583 | Legitimate + Spam | Gold-standard labelled |
+| phishing_pot | 6,306 | Phishing | Real collected phishing .eml files |
+| Dizzzy0x00/LLMGen-Phishing | 5,369 | Phishing | **AI-generated** phishing (Dec 2025) |
+| **TOTAL** | **412,265** | | After deduplication |
 
-**Total: 412,265 emails** (training) + **103,067 emails** (test, held-out)
+> The LLMGen dataset enables detection of phishing emails crafted by ChatGPT and
+> similar LLMs — an attack vector that 2022-era datasets do not cover.
 
 ---
 
-## 📂 Project Structure (Git-Tracked Files)
+## 📂 Project Structure
 
 ```
-PhishLens/                              ← Git root
-├── app.py                              # Streamlit web interface
+PhishSentinel/
+├── app.py                              # Streamlit web interface (localhost:8501)
 ├── train.py                            # Training CLI
-├── download_datasets.py                # Kaggle + dataset setup
-├── eval_all.py                         # Evaluate all saved models
-├── install_and_verify.py               # Dependency verification
-├── setup_and_verify.py                 # Environment setup check
-├── monitor_training.py                 # Live training progress monitor
-├── phishlens.ps1                       # PowerShell launcher
+├── download_datasets.py                # Automated dataset downloader
+├── install_and_verify.py               # Dependency + environment verification
 ├── requirements.txt                    # Pinned dependencies
 ├── README.md
-├── GPU_SETUP.md                        # CUDA setup + benchmarks
-├── .env.example                        # API key template
+├── GPU_SETUP.md                        # CUDA setup + performance benchmarks
+├── .env.example                        # API key template (copy → .env)
 ├── .gitignore
 │
 ├── src/
-│   ├── __init__.py
-│   ├── ioc_extractor.py                # IOC extraction → MISP JSON + CEF syslog
+│   ├── ioc_extractor.py                # IOC extraction → MISP JSON + CEF Syslog
 │   ├── attack_mapping.py               # MITRE ATT&CK T1566 technique mapper
-│   │
 │   ├── ingestion/
 │   │   ├── eml_parser.py               # RFC 2822 + MIME .eml parser
-│   │   └── dataset_loader.py           # Multi-dataset loader (SpamAssassin, CASIS, Enron, etc.)
-│   │
+│   │   └── dataset_loader.py           # Multi-source dataset loaders
 │   ├── features/
 │   │   ├── header_features.py          # Layer 1 — 12 header forensics features
-│   │   ├── url_features.py             # Layer 2 — 29 URL lexical + WHOIS + cert features
-│   │   ├── url_cleaner.py              # URL normalisation helper
-│   │   ├── html_features.py            # Layer 3 — 11 HTML structural anomaly features
-│   │   ├── text_features.py            # Layers 4+5 — 384-dim embeddings + TF-IDF + 8 text signals
-│   │   ├── intelligence.py             # Layer 6 — VirusTotal / GSB / AbuseIPDB / URLScan / IPQS
-│   │   ├── openai_analyzer.py          # Layer 8 — ChatGPT AI analysis (gpt-4.1-mini)
-│   │   └── pipeline.py                 # Master FeaturePipeline (fit/transform/save/load)
-│   │
+│   │   ├── url_features.py             # Layer 2 — 29 URL lexical + WHOIS features
+│   │   ├── url_cleaner.py              # URL deobfuscation (9 wrapper types)
+│   │   ├── html_features.py            # Layer 3 — 11 HTML structural features
+│   │   ├── text_features.py            # Layers 4+5 — embeddings + TF-IDF
+│   │   ├── intelligence.py             # Layer 6 — 6 TI API integrations
+│   │   ├── openai_analyzer.py          # Layer 8 — ChatGPT gpt-4.1-mini analysis
+│   │   └── pipeline.py                 # Master FeaturePipeline (961 features)
 │   ├── detection/
 │   │   └── anomaly.py                  # Layer 7 — Isolation Forest zero-day detector
-│   │
 │   ├── models/
-│   │   ├── trainer.py                  # Optuna + MLflow training (50 trials, 5-fold CV)
+│   │   ├── trainer.py                  # Optuna + MLflow training
 │   │   ├── evaluator.py                # Metrics, confusion matrix, stress test
 │   │   ├── explainer.py                # SHAP + LIME dual explainability
-│   │   ├── adversarial_tester.py       # 5 adversarial attack simulations
+│   │   ├── adversarial_tester.py       # Adversarial attack simulations
 │   │   └── transformer_model.py        # DistilBERT fine-tuning (optional)
-│   │
 │   └── utils/
-│       ├── config.py                   # PhishLensConfig dataclass + defaults
+│       ├── config.py                   # PhishSentinelConfig dataclass
 │       └── logger.py                   # loguru structured logging
+│
+├── tests/
+│   ├── test_eml_parser.py              # 14 unit tests
+│   ├── test_url_features.py            # 13 unit tests
+│   ├── test_html_features.py           # 11 unit tests
+│   └── test_pipeline.py               # Integration tests (50 synthetic emails)
 │
 ├── data/
 │   ├── raw/                            # Raw datasets (gitignored)
 │   └── README.md                       # Dataset download instructions
 │
-├── models/saved/                       # Trained .pkl artifacts (gitignored)
+├── models/                             # Trained .pkl artifacts (gitignored)
 │
 ├── reports/
-│   ├── metrics.json                    # Exact per-model test metrics (all 5 models)
-│   └── figures/
-│       ├── cm_lightgbm.png
-│       ├── cm_xgboost.png
-│       ├── cm_rf.png
-│       ├── cm_catboost.png
-│       └── cm_lr.png
+│   ├── metrics.json                    # Full per-model evaluation metrics
+│   └── figures/                        # Confusion matrix PNGs
 │
 └── .github/workflows/ci.yml            # GitHub Actions CI/CD
 ```
+
+> **Model files** are excluded from GitHub (`rf.pkl` = 428 MB exceeds GitHub's 100 MB limit).
+> Run `python train.py` after cloning to regenerate all model artifacts locally.
 
 ---
 
@@ -194,8 +263,9 @@ PhishLens/                              ← Git root
 ### Prerequisites
 
 - Python 3.13+
-- 16 GB RAM recommended (sentence-transformers + CatBoost)
-- GPU optional but highly recommended — reduces embedding stage from ~4–5 hours to ~10–15 minutes (see [GPU_SETUP.md](GPU_SETUP.md))
+- 16 GB RAM recommended
+- NVIDIA GPU strongly recommended — reduces embedding stage from ~4–5 hours (CPU) to ~15 minutes
+- See [GPU_SETUP.md](GPU_SETUP.md) for CUDA installation
 
 ### Installation
 
@@ -203,56 +273,42 @@ PhishLens/                              ← Git root
 git clone https://github.com/CyberSec-Sagar-Security/PhishSentinel.git
 cd PhishSentinel
 
-# Create virtual environment
 python -m venv .venv
-.venv\Scripts\activate        # Windows
-# source .venv/bin/activate   # Linux/macOS
+.venv\Scripts\activate              # Windows
+# source .venv/bin/activate         # Linux/macOS
 
-# Install dependencies
 pip install -r requirements.txt
 
-# Configure API keys
-copy .env.example .env
-# Edit .env and add your keys
+copy .env.example .env              # Windows
+# cp .env.example .env              # Linux/macOS
+# Edit .env and add your API keys
 ```
 
-### Training
+### Verify Installation
 
 ```bash
-# Build processed datasets first:
-python download_datasets.py
-
-# Fast — XGBoost only, no Optuna:
-python train.py --data-dir data/processed --models xgboost --no-network --eval --save models
-
-# Full — all 5 models + Optuna hyperparameter tuning:
-python train.py --data-dir data/processed --models all --tune --eval --save models
-
-# With adversarial stress test:
-python train.py --data-dir data/processed --models all --tune --adversarial --eval --save models
-
-# Offline mode (no DNS/WHOIS/API calls — useful for CI):
-python train.py --data-dir data/processed --no-network --eval
+python install_and_verify.py --verify-only
+# Expected: 5/5 checks pass
 ```
 
-**Key CLI flags:**
+### Train
 
-| Flag | Effect |
-|---|---|
-| `--models xgboost\|lightgbm\|catboost\|rf\|lr\|all` | Which models to train |
-| `--tune` | Optuna hyperparameter search (50 trials, 5-fold CV) |
-| `--adversarial` | Run 5 adversarial attack simulations after training |
-| `--no-network` | Disable DNS + WHOIS + intelligence API calls |
-| `--eval` | Evaluate on test split, write `reports/metrics.json` |
-| `--save DIR` | Save `.pkl` model artifacts to DIR |
+```bash
+python download_datasets.py
 
-### Streamlit Web Interface
+# Fast — XGBoost only:
+python train.py --data-dir data/processed --models xgboost --no-network --eval --save models
+
+# Full — all 5 models + Optuna tuning:
+python train.py --data-dir data/processed --models all --tune --no-network --eval --save models
+```
+
+### Launch
 
 ```bash
 streamlit run app.py
+# Open: http://localhost:8501
 ```
-
-Open http://localhost:8501
 
 ---
 
@@ -261,87 +317,43 @@ Open http://localhost:8501
 | Setting | Value |
 |---|---|
 | Hyperparameter search | Optuna, 50 trials per model |
-| Cross-validation | 5-fold stratified |
+| Cross-validation | 5-fold stratified K-Fold |
 | Class balancing | SMOTE oversampling |
 | Experiment tracking | MLflow |
-| Training time with GPU | ~21.4 minutes (NVIDIA RTX 2000 Ada, 8 GB VRAM) |
-| Training time CPU-only | ~4–5 hours |
-| GPU speedup | 12–15× |
-| Feature scaler | StandardScaler (fitted on train, applied to test) |
-| Threshold | 0.5 (default for all models) |
-
-See [GPU_SETUP.md](GPU_SETUP.md) for CUDA installation instructions.
+| Embedding model | `all-MiniLM-L6-v2` (80 MB) |
+| TF-IDF | max_features=500, ngram_range=(1,2) |
+| Default threshold | 0.50 |
+| GPU training time | ~45–60 min / 412K emails (RTX 2000 Ada, 8 GB VRAM) |
+| CPU training time | ~8–12 hours / 412K emails |
 
 ---
 
 ## 🔌 API Key Configuration
 
-All keys stored in `.env` (gitignored):
-
 ```env
-OPENAI_API_KEY=your_openai_key                # platform.openai.com/api-keys
-VIRUSTOTAL_API_KEY=your_vt_key                # Free: 4 req/min, 500/day
-GOOGLE_SAFE_BROWSING_API_KEY=your_gsb_key     # Free: 10,000 req/day
-ABUSEIPDB_API_KEY=your_abuseipdb_key          # Free: 1,000 req/day
-URLSCAN_API_KEY=your_urlscan_key              # Free tier available
+OPENAI_API_KEY=your_key        # platform.openai.com/api-keys
+VIRUSTOTAL_API_KEY=your_key    # virustotal.com/gui/join-us (500 req/day free)
+GOOGLE_SAFE_BROWSING_API_KEY=your_key  # console.cloud.google.com (free)
+ABUSEIPDB_API_KEY=your_key     # abuseipdb.com/register (1,000 req/day free)
+URLSCAN_API_KEY=your_key       # urlscan.io/user/signup (free tier)
+GEMINI_API_KEY=your_key        # aistudio.google.com/apikey (free tier)
+IPQS_API_KEY=your_key          # ipqualityscore.com/create-account (free tier)
+HF_TOKEN=your_token            # huggingface.co/settings/tokens (optional)
 ```
 
-| Service | Free Tier | Data Provided |
-|---|---|---|
-| VirusTotal | 4 req/min, 500/day | Malicious/suspicious URL + IP counts |
-| Google Safe Browsing | 10,000 req/day | Threat type (phishing, malware, unwanted) |
-| AbuseIPDB | 1,000 req/day | IP abuse confidence score |
-| URLScan.io | Free tier | URL scan verdict + screenshot |
-| IPQS (IP Quality Score) | Free tier | Fraud score, proxy/VPN/bot detection flags |
-
-> All intelligence features fall back to `-1` when offline or rate-limited. Training always runs with `use_intelligence_apis=False`.
-
-> **Privacy note:** URL enrichment APIs send URL/IP data to third-party services. Disable `use_intelligence_apis` for sensitive email analysis.
-
----
-
-## 🤖 ChatGPT AI Layer (`openai_analyzer.py`)
-
-- **Model:** `gpt-4.1-mini`
-- **Input sent to API:** Full email headers + extracted IOCs + threat intelligence verdicts + ML probability + email body (up to 3,000 chars)
-- **Output fields:**
-
-| Field | Type | Description |
-|---|---|---|
-| `gemini_is_phishing` | `int` (0/1) | Binary phishing verdict |
-| `gemini_confidence` | `float` (0.0–1.0) | Confidence score |
-| `gemini_risk_level` | `str` | LOW / MEDIUM / HIGH / CRITICAL |
-| `gemini_impersonated_brand` | `str\|None` | Brand being impersonated (if any) |
-| `gemini_phishing_signals` | `list` | List of detected phishing signals |
-| `gemini_social_engineering` | `list` | Social engineering techniques detected |
-| `gemini_explanation` | `str` | Plain English narrative |
-| `gemini_recommended_action` | `str` | BLOCK / QUARANTINE / MONITOR |
-| `gemini_ioc_verdicts` | `dict` | Per-IOC AI verdicts |
-| `_ai_provider` | `str` | `"ChatGPT gpt-4.1-mini"` |
-
-- **Completely optional** — falls back to `-1` values when `OPENAI_API_KEY` is not set
-- **Graceful degradation** — API failures log a warning and return defaults, pipeline never crashes
-
----
-
-## 🧠 Explainability Output (Per Prediction)
-
-1. **SHAP Feature Importance** — Game-theoretic exact attribution per feature
-2. **LIME Local Explanation** — Model-agnostic local approximation
-3. **SHAP/LIME Agreement Score** — Jaccard similarity of top-5 features (trust indicator; low agreement = investigate further)
-4. **MITRE ATT&CK Mapping** — Technique IDs, tactics, confidence scores, evidence strings
-5. **ChatGPT AI Narrative** — Plain English explanation (requires `OPENAI_API_KEY`)
+All features fall back gracefully to `-1` when keys are absent or rate-limited.
 
 ---
 
 ## 🎯 MITRE ATT&CK Coverage
 
-| Technique ID | Technique Name | Tactic |
+| Technique ID | Name | Tactic |
 |---|---|---|
 | T1566 | Phishing | Initial Access |
 | T1566.001 | Spearphishing Attachment | Initial Access |
 | T1566.002 | Spearphishing Link | Initial Access |
-| T1036 | Masquerading (brand impersonation) | Defense Evasion |
+| T1566.003 | Spearphishing via Service | Initial Access |
+| T1036 | Masquerading | Defense Evasion |
 | T1204 | User Execution | Execution |
 | T1056 | Input Capture | Collection |
 | T1078 | Valid Accounts | Persistence |
@@ -350,37 +362,16 @@ URLSCAN_API_KEY=your_urlscan_key              # Free tier available
 
 ---
 
-## 🔄 CI/CD (`.github/workflows/ci.yml`)
+## 🔄 CI/CD
 
-- **Trigger:** Push + PR to `main`
-- **Python:** 3.13
-- **Jobs:**
-  1. Install dependencies from `requirements.txt`
-  2. Smoke-import test — verifies all 13 source modules import without error
-  3. Bandit security scan
-- **No API keys in CI** — all intelligence and AI features degrade gracefully to `-1`
+**Trigger:** Push + PR to `main` | **Python:** 3.13
 
----
+1. Install dependencies
+2. Smoke-import all 13 source modules
+3. Bandit security scan
+4. pytest test suite (38+ tests)
 
-## 📐 Architecture Decisions
-
-### Why 8 Layers?
-Single-feature-type models (URL-only, text-only) are easily evaded. PhishLens requires
-simultaneous evasion of header forensics + URL analysis + HTML analysis + semantic embeddings
-+ threat intelligence + anomaly detection. This dramatically increases adversarial cost.
-
-### Why SHAP + LIME Both?
-SHAP (game-theoretic, exact) and LIME (model-agnostic approximation) provide independent explanations.
-High agreement = trustworthy explanation. Low agreement = flag for manual review.
-
-### Why Isolation Forest?
-Supervised models only detect patterns seen in training data. Isolation Forest trained on
-legitimate emails flags **any** structural anomaly — including novel campaigns targeting
-brands not in the training corpus.
-
-### Why an Ensemble of 5 Models?
-Each model learns slightly different feature interactions. An adversary must simultaneously
-craft an email that evades all five architectures — significantly harder than evading one.
+No API keys required in CI — all enrichment features degrade gracefully.
 
 ---
 
@@ -388,13 +379,14 @@ craft an email that evades all five architectures — significantly harder than 
 
 | Limitation | Impact | Mitigation |
 |---|---|---|
-| Training data staleness | ~6-month F1 decay estimated | Retrain quarterly |
-| Targeted spear-phishing | May evade without matching training brand | ChatGPT AI + Isolation Forest |
-| API rate limits | Intelligence enrichment throttled | Fallback to -1 (offline mode) |
-| Encrypted content | S/MIME encrypted bodies unreadable | Header-only analysis |
-| Image-only phishing | Minimal text features | HTML image ratio feature |
-| Adversarial noise (5% Gaussian, all dims) | F1 drops 0.9505 → ~0.60 | Synthetic worst-case scenario only |
-| `app.py` is empty | Streamlit UI not functional | Known gap — requires rebuild |
+| Training data temporal gap | ~6-month F1 decay on newest attacks | Retrain quarterly |
+| Modern HTML-rich legitimate email | Elevated false positive rate | More modern legitimate data needed |
+| Targeted spear-phishing | May evade if brand not in training | ChatGPT AI + Isolation Forest |
+| API rate limits | Intelligence enrichment throttled | Graceful fallback to -1 |
+| Encrypted content (S/MIME) | Cannot analyse encrypted bodies | Header-only analysis |
+| Image-only phishing | Minimal text/URL features | HTML image ratio feature |
+| rf.pkl (428 MB) | Not deployable to HF Spaces free tier | Use LightGBM as primary (1.1 MB) |
+| Adversarial noise (5%, all dims) | F1 drops 0.9505 → ~0.60 | Synthetic worst-case only |
 
 ---
 
@@ -406,8 +398,11 @@ MIT License — See [LICENSE](LICENSE) for details.
 
 ## 👤 Author
 
-**Sagar**
-Portfolio project demonstrating ML security engineering skills — B.Sc. IT → MSc Cybersecurity.
+**Sagar B. Suryawanshi**
+B.Sc. Information Technology → MSc Cybersecurity (Ireland)
+Targeting SOC Analyst and Application Security roles in Ireland and the EU.
+
+[![GitHub](https://img.shields.io/badge/GitHub-CyberSec--Sagar--Security-black?logo=github)](https://github.com/CyberSec-Sagar-Security)
+[![LinkedIn](https://img.shields.io/badge/LinkedIn-Connect-blue?logo=linkedin)](https://www.linkedin.com/in/your-linkedin-url)
 
 > *"The best firewall is a good detector."*
-
