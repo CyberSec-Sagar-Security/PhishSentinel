@@ -867,8 +867,8 @@ def render_shap(shap_df: Optional[pd.DataFrame]):
         title="Top 20 features by SHAP contribution (red=phishing↑, green=phishing↓)",
         xaxis_title="SHAP value",
         yaxis_title="",
-        plot_bgcolor="#0d1117",
-        paper_bgcolor="#0d1117",
+        plot_bgcolor="rgba(0,0,0,0)",
+        paper_bgcolor="rgba(0,0,0,0)",
         font_color="#f0f6fc",
         height=500,
         margin={"l": 200, "r": 20, "t": 50, "b": 40},
@@ -1065,42 +1065,25 @@ def main():
 
     # ── TAB 1: Overview ────────────────────────────────────────────────────
     with tab_ov:
-        # Probability gauge
-        try:
-            import plotly.graph_objects as go
-            gauge_colour = "#d32f2f" if prob >= config["threshold"] else \
-                           "#fbc02d" if prob >= THRESH_UNCERTAIN else "#388e3c"
-            fig = go.Figure(go.Indicator(
-                mode="gauge+number",
-                value=prob * 100,
-                number={"suffix": "%", "font": {"size": 28, "color": "#f0f6fc"}},
-                gauge={
-                    "axis": {"range": [0, 100], "tickcolor": "#8b949e", "tickfont": {"color": "#8b949e"}},
-                    "bar": {"color": gauge_colour},
-                    "bgcolor": "#21262d",
-                    "steps": [
-                        {"range": [0, THRESH_UNCERTAIN * 100], "color": "#0d2b0d"},
-                        {"range": [THRESH_UNCERTAIN * 100, config["threshold"] * 100], "color": "#2b1d00"},
-                        {"range": [config["threshold"] * 100, 100], "color": "#2b0000"},
-                    ],
-                    "threshold": {
-                        "line": {"color": "#f0f6fc", "width": 2},
-                        "thickness": 0.75,
-                        "value": config["threshold"] * 100,
-                    },
-                },
-                title={"text": "Phishing Probability", "font": {"color": "#8b949e", "size": 14}},
-                domain={"x": [0, 1], "y": [0, 1]},
-            ))
-            fig.update_layout(
-                paper_bgcolor="#0d1117",
-                font_color="#f0f6fc",
-                height=220,
-                margin={"l": 20, "r": 20, "t": 40, "b": 10},
+        # Probability ring — centred, no black background box
+        gauge_colour = "#d32f2f" if prob >= config["threshold"] else \
+                       "#fbc02d" if prob >= THRESH_UNCERTAIN else "#388e3c"
+        gauge_label  = "🚨 PHISHING" if prob >= config["threshold"] else \
+                       "⚠️ UNCERTAIN" if prob >= THRESH_UNCERTAIN else "✅ LEGITIMATE"
+        bar_pct = int(prob * 100)
+        _g1, _gc, _g2 = st.columns([1, 2, 1])
+        with _gc:
+            st.markdown(
+                f'<div style="text-align:center;padding:18px 0 6px 0">'
+                f'<div style="font-size:3rem;font-weight:900;color:{gauge_colour};line-height:1">{prob:.1%}</div>'
+                f'<div style="font-size:1rem;color:{gauge_colour};font-weight:700;margin-top:6px;letter-spacing:1px">{gauge_label}</div>'
+                f'<div style="margin:12px auto 0 auto;height:10px;border-radius:5px;background:#21262d;max-width:320px;overflow:hidden">'
+                f'<div style="width:{bar_pct}%;height:100%;background:{gauge_colour};border-radius:5px;transition:width .4s"></div>'
+                f'</div>'
+                f'<div style="color:#8b949e;font-size:0.8rem;margin-top:4px">Phishing Probability · threshold {config["threshold"]:.0%}</div>'
+                f'</div>',
+                unsafe_allow_html=True,
             )
-            st.plotly_chart(fig, use_container_width=True)
-        except ImportError:
-            st.metric("Phishing Probability", f"{prob:.1%}")
 
         render_shap(results.get("shap_df"))
         render_attack_techniques(results.get("attack_techniques", []))
