@@ -162,7 +162,7 @@ def load_feature_pipeline() -> Optional[FeaturePipeline]:
     if not FEATURE_PIPELINE_PATH.exists():
         return None
     try:
-        return joblib.load(FEATURE_PIPELINE_PATH)
+        return FeaturePipeline.load(str(FEATURE_PIPELINE_PATH))
     except Exception as exc:
         log.error(f"Failed to load feature_pipeline: {exc}")
         return None
@@ -392,16 +392,13 @@ def run_analysis(raw_email: str, config: Dict) -> Dict:
             st.stop()
 
         # Transform single email to feature vector
+        # Set pipeline flags on the instance (models were trained with use_gemini=False)
+        feature_pipeline.use_network = config["use_network"]
+        feature_pipeline.use_intelligence_apis = config["use_intelligence"]
+        feature_pipeline.use_gemini = False  # MUST stay False — models trained without ChatGPT ML feature
         try:
-            from scipy.sparse import issparse
-            X = feature_pipeline.transform(
-                [raw_email],
-                use_network=config["use_network"],
-                use_intelligence_apis=config["use_intelligence"],
-                use_gemini=False,  # ChatGPT handled separately after ML
-            )
-            if issparse(X):
-                X = X.toarray()
+            # transform_single returns (np.ndarray shape [1, n_features], feature_names list)
+            X, extracted_feature_names = feature_pipeline.transform_single(raw_email)
             X = np.nan_to_num(X.astype(np.float32), nan=0.0, posinf=0.0, neginf=0.0)
         except Exception as exc:
             st.error(f"Feature extraction failed: {exc}")
@@ -409,7 +406,7 @@ def run_analysis(raw_email: str, config: Dict) -> Dict:
             st.stop()
 
         results["X"] = X
-        results["feature_names"] = getattr(feature_pipeline, "feature_names_", [f"f{i}" for i in range(X.shape[1])])
+        results["feature_names"] = extracted_feature_names or [f"f{i}" for i in range(X.shape[1])]
 
     with st.spinner(f"Running {config['model_name']} classifier…"):
         model_filename = AVAILABLE_MODELS[config["model_name"]]
@@ -457,32 +454,32 @@ def run_analysis(raw_email: str, config: Dict) -> Dict:
     else:
         results["anomaly_score"] = None
 
-    # ── IOC extraction ─────────────────────────────────────────────────────
+    # ── IOC extraction + MITRE ATT&CK mapping ─────────────────────────────
+    # extract_iocs handles ATT&CK mapping internally when feature_flags is provided.
     with st.spinner("Extracting IOCs…"):
         try:
-            iocs = extract_iocs(parsed)
+            # Build feature dict from the extracted feature vector for ATT&CK mapping
+            feature_dict = dict(zip(results["feature_names"], X[0].tolist()))
+            iocs = extract_iocs(
+                parsed,
+                risk_score=phishing_prob,
+                feature_flags=feature_dict,
+            )
             results["iocs"] = iocs
+            results["attack_techniques"] = iocs.get("attack_techniques", [])
         except Exception as exc:
             log.warning(f"IOC extraction failed: {exc}")
             results["iocs"] = {}
-
-    # ── MITRE ATT&CK mapping ───────────────────────────────────────────────
-    try:
-        # Build a flat features dict from the parsed email
-        flat_features = {
-            "parsed_attachments_count": parsed.get("attachments_count", 0),
-            "parsed_urls_count": len(parsed.get("urls", [])),
-        }
-        attack_techniques = map_attack_techniques(
-            features=flat_features,
-            iocs=results.get("iocs", {}),
-            phishing_probability=phishing_prob,
-            verdict=verdict,
-        )
-        results["attack_techniques"] = attack_techniques
-    except Exception as exc:
-        log.warning(f"ATT&CK mapping failed: {exc}")
-        results["attack_techniques"] = []
+            # Fallback ATT&CK mapping without feature dict
+            try:
+                results["attack_techniques"] = map_attack_techniques(
+                    features={},
+                    iocs={},
+                    phishing_probability=phishing_prob,
+                    verdict=verdict,
+                )
+            except Exception:
+                results["attack_techniques"] = []
 
     # ── ChatGPT forensic analysis ──────────────────────────────────────────
     if config["use_chatgpt"]:
@@ -528,18 +525,26 @@ def run_analysis(raw_email: str, config: Dict) -> Dict:
                 if model_type == "tree":
                     explainer = shap.TreeExplainer(model)
                     shap_values = explainer.shap_values(X_pred)
-                    # For binary classification, shap_values may be a list of 2 arrays
+                    # shap_values can be:
+                    #   list of 2 arrays (RF, older SHAP): use class-1 (phishing) → shap_values[1]
+                    #   3D array shape (1, n_features, 2) (newer SHAP): index [:, :, 1]
+                    #   2D array shape (1, n_features) (LightGBM/XGB binary): use row 0
                     if isinstance(shap_values, list):
-                        sv = shap_values[1][0]
+                        sv = np.array(shap_values[1]).ravel()
+                    elif isinstance(shap_values, np.ndarray) and shap_values.ndim == 3:
+                        sv = shap_values[0, :, 1]
                     else:
-                        sv = shap_values[0] if shap_values.ndim > 1 else shap_values
+                        sv = np.array(shap_values).ravel()
                 else:
-                    explainer = shap.LinearExplainer(model, X_pred)
+                    # LinearExplainer: shap_values is 2D array (n_samples, n_features)
+                    explainer = shap.LinearExplainer(model, X_pred, feature_perturbation="correlation_dependent")
                     shap_values = explainer.shap_values(X_pred)
-                    sv = shap_values[0] if hasattr(shap_values, '__len__') and len(shap_values) > 0 else shap_values
+                    sv = np.array(shap_values).ravel()
 
-                feature_names = results["feature_names"]
-                shap_df = pd.DataFrame({"feature": feature_names, "shap": sv.flatten()})
+                feature_names_list = results["feature_names"]
+                # Align lengths in case feature count differs (should not happen)
+                n = min(len(feature_names_list), len(sv))
+                shap_df = pd.DataFrame({"feature": feature_names_list[:n], "shap": sv[:n]})
                 shap_df["abs_shap"] = shap_df["shap"].abs()
                 shap_df = shap_df.sort_values("abs_shap", ascending=False).head(20)
                 results["shap_df"] = shap_df
@@ -616,20 +621,28 @@ def render_iocs(iocs: Dict):
         st.info("No IOCs extracted.")
         return
 
-    tabs = st.tabs(["URLs", "IPs", "Domains", "Email Addresses", "Attachment Hashes", "Phone Numbers", "Export"])
+    tabs = st.tabs(["URLs", "IPs", "Domains", "Email Addresses", "Attachment Hashes", "Export"])
 
     with tabs[0]:
         urls = iocs.get("urls", [])
+        cleaned_map = iocs.get("url_cleaning_map", {})
         if urls:
             for url in urls[:50]:
-                st.markdown(f'<span class="ioc-pill">{url}</span>', unsafe_allow_html=True)
+                info = cleaned_map.get(url, {})
+                was_wrapped = info.get("was_wrapped", False)
+                clean = info.get("cleaned", url)
+                pill = f'<span class="ioc-pill">{url}</span>'
+                if was_wrapped and clean != url:
+                    pill += f' <small style="color:#f57c00">→ {clean}</small>'
+                st.markdown(pill, unsafe_allow_html=True)
             if len(urls) > 50:
                 st.caption(f"... and {len(urls) - 50} more URLs")
         else:
             st.info("No URLs found.")
 
     with tabs[1]:
-        ips = iocs.get("ip_addresses", [])
+        # extract_iocs stores sender IPs under key 'sender_ips'
+        ips = iocs.get("sender_ips", [])
         if ips:
             for ip in ips:
                 st.markdown(f'<span class="ioc-pill">{ip}</span>', unsafe_allow_html=True)
@@ -645,36 +658,31 @@ def render_iocs(iocs: Dict):
             st.info("No domains extracted.")
 
     with tabs[3]:
-        emails = iocs.get("email_addresses", [])
+        # extract_iocs stores sender emails under key 'sender_emails'
+        emails = iocs.get("sender_emails", [])
         if emails:
             for e in emails:
                 st.markdown(f'<span class="ioc-pill">{e}</span>', unsafe_allow_html=True)
         else:
-            st.info("No email addresses found.")
+            st.info("No sender email addresses found.")
 
     with tabs[4]:
         hashes = iocs.get("attachment_hashes", [])
         if hashes:
             for h in hashes:
-                md5 = h.get("md5", "")
+                fname  = h.get("filename", "unknown")
+                md5    = h.get("md5", "")
                 sha256 = h.get("sha256", "")
-                if md5:
-                    st.markdown(f'**MD5:** <span class="ioc-pill">{md5}</span>', unsafe_allow_html=True)
+                st.markdown(f"**File:** `{fname}`")
                 if sha256:
-                    st.markdown(f'**SHA256:** <span class="ioc-pill">{sha256}</span>', unsafe_allow_html=True)
+                    st.markdown(f'SHA256: <span class="ioc-pill">{sha256}</span>', unsafe_allow_html=True)
+                if md5:
+                    st.markdown(f'MD5: <span class="ioc-pill">{md5}</span>', unsafe_allow_html=True)
         else:
             st.info("No attachment hashes found.")
 
     with tabs[5]:
-        phones = iocs.get("phone_numbers", [])
-        if phones:
-            for p in phones:
-                st.markdown(f'<span class="ioc-pill">{p}</span>', unsafe_allow_html=True)
-        else:
-            st.info("No phone numbers found.")
-
-    with tabs[6]:
-        st.markdown("**MISP-compatible JSON export:**")
+        st.markdown("**IOC JSON export:**")
         # Build clean export (no internal _ keys)
         export = {k: v for k, v in iocs.items() if not k.startswith("_")}
         json_str = json.dumps(export, indent=2, default=str)
