@@ -187,7 +187,7 @@ def _extract_email_no_tfidf(
             feature_vector.append(float(v))
             feature_names.append(f"intel_{k}")
 
-    # ---- Module 7: Gemini AI (2) ----------------------------------------
+    # ---- Module 7: ChatGPT AI (2) ----------------------------------------
     if use_gemini:
         try:
             from src.features.gemini_analyzer import get_gemini_ml_feature
@@ -255,7 +255,7 @@ class FeaturePipeline:
         use_network: If True, enables WHOIS + crt.sh + API lookups.
                      Set False for fast offline training / CI testing.
         use_intelligence_apis: If True, calls VT / GSB / AbuseIPDB / URLScan.
-        use_gemini: If True, calls Gemini AI for additional analysis feature.
+        use_gemini: If True, calls ChatGPT AI for additional analysis feature.
         use_tfidf: If True, includes TF-IDF sparse features.
     """
 
@@ -705,7 +705,7 @@ class FeaturePipeline:
                 feature_vector.append(float(v))
                 feature_names.append(f"intel_{k}")
 
-        # ---- Module 7: Gemini AI feature (2) ------------------------------
+        # ---- Module 7: ChatGPT AI feature (2) ------------------------------
         if self.use_gemini:
             try:
                 from src.features.gemini_analyzer import get_gemini_ml_feature

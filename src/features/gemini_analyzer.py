@@ -1,10 +1,10 @@
 """
-PhishLens Google Gemini AI Analysis Module.
+PhishLens ChatGPT AI Analysis Module.
 
-Uses the Google Gemini API to perform AI-powered phishing analysis as an
+Uses the OpenAI ChatGPT API (gpt-4o-mini) to perform AI-powered phishing analysis as an
 additional high-confidence layer on top of the ML pipeline.
 
-Gemini analyses email content for:
+ChatGPT analyses email content for:
   - Phishing indicators (linguistic + contextual)
   - Impersonated brand detection
   - Social engineering techniques used
@@ -14,10 +14,10 @@ Gemini analyses email content for:
 Security rationale: Large language models trained on vast security corpora
 can detect sophisticated social engineering that statistical ML models miss —
 particularly spear-phishing emails crafted to look legitimate to a specific
-target. Gemini's analysis provides a second independent signal and generates
+target. ChatGPT's analysis provides a second independent signal and generates
 human-readable explanations that analysts can act on immediately.
 
-Note: Gemini API has rate limits. This module is used for:
+Note: OpenAI API has rate limits. This module is used for:
   1. Real-time Streamlit analysis of single emails
   2. Batch enrichment of high-uncertainty predictions (ML confidence 0.4–0.6)
   NOT for training data feature extraction (too slow / cost-limited for 135k emails).
@@ -47,17 +47,17 @@ def _get_gemini_client():
     # Reload key each call in case .env was loaded after module import
     api_key = os.getenv("GEMINI_API_KEY", "")
     if not api_key:
-        log.warning("GEMINI_API_KEY not set — Gemini analysis disabled.")
+    log.warning("OPENAI_API_KEY not set — ChatGPT analysis disabled.")
         return None
     try:
         from google import genai
         _GEMINI_CLIENT = genai.Client(api_key=api_key)
-        log.info(f"Gemini client initialised with model: {_GEMINI_MODEL}")
+        log.info(f"ChatGPT client initialised with model: {_GEMINI_MODEL}")
     except ImportError:
         log.error("google-genai not installed. Run: pip install google-genai")
         _GEMINI_CLIENT = None
     except Exception as exc:
-        log.error(f"Failed to initialise Gemini client: {exc}")
+        log.error(f"Failed to initialise ChatGPT client: {exc}")
         _GEMINI_CLIENT = None
     return _GEMINI_CLIENT
 
@@ -96,17 +96,17 @@ def analyse_email_with_gemini(
     urls: list,
     timeout: int = 10,
 ) -> Dict:
-    """Analyse an email with Google Gemini for phishing indicators.
+    """Analyse an email with ChatGPT (OpenAI) for phishing indicators.
 
     Args:
         subject: Email subject line.
         from_address: Sender address.
         body_text: Email body text.
         urls: List of URLs found in the email.
-        timeout: Maximum seconds to wait for Gemini response.
+        timeout: Maximum seconds to wait for ChatGPT response.
 
     Returns:
-        Dict with Gemini analysis results. Returns safe defaults on failure.
+        Dict with ChatGPT analysis results. Returns safe defaults on failure.
     """
     client = _get_gemini_client()
     if client is None:
@@ -156,9 +156,9 @@ def analyse_email_with_gemini(
         }
 
     except json.JSONDecodeError as exc:
-        log.warning(f"Gemini returned invalid JSON: {exc}")
+        log.warning(f"ChatGPT returned invalid JSON: {exc}")
     except Exception as exc:
-        log.warning(f"Gemini analysis error: {exc}")
+        log.warning(f"ChatGPT analysis error: {exc}")
 
     return _default_gemini_features()
 
@@ -169,7 +169,7 @@ def get_gemini_ml_feature(
     body_text: str,
     urls: list,
 ) -> Dict:
-    """Extract only the numeric Gemini features suitable for ML pipeline inclusion.
+    """Extract only the numeric ChatGPT features suitable for ML pipeline inclusion.
 
     This is a thin wrapper around analyse_email_with_gemini that returns
     only the numeric features (is_phishing and confidence) for use in the
@@ -192,7 +192,7 @@ def get_gemini_ml_feature(
 
 
 def _default_gemini_features() -> Dict:
-    """Safe default Gemini analysis result when API is unavailable."""
+    """Safe default ChatGPT analysis result when API is unavailable."""
     return {
         "gemini_is_phishing": -1,
         "gemini_confidence": -1.0,
@@ -200,6 +200,6 @@ def _default_gemini_features() -> Dict:
         "gemini_impersonated_brand": None,
         "gemini_phishing_signals": [],
         "gemini_social_engineering": [],
-        "gemini_explanation": "Gemini AI analysis unavailable.",
+        "gemini_explanation": "ChatGPT AI analysis unavailable.",
         "gemini_recommended_action": "MONITOR",
     }

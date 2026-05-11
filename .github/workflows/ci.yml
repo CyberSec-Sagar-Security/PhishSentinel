@@ -36,7 +36,6 @@ jobs:
 
       - name: Smoke test — verify core imports
         env:
-          GEMINI_API_KEY: "test-key-not-real"
           VIRUSTOTAL_API_KEY: "test-key-not-real"
           GOOGLE_SAFE_BROWSING_API_KEY: "test-key-not-real"
           ABUSEIPDB_API_KEY: "test-key-not-real"

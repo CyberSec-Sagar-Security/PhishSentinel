@@ -202,7 +202,7 @@ REQUIRED_FILES = [
 # ─────────────────────────────────────────────────────────────────────────────
 
 API_KEYS = [
-    ("GEMINI_API_KEY",                 "Google Gemini (AI analysis layer)"),
+    ("OPENAI_API_KEY",                  "OpenAI ChatGPT (AI analysis layer)"),
     ("VIRUSTOTAL_API_KEY",             "VirusTotal (URL reputation)"),
     ("GOOGLE_SAFE_BROWSING_API_KEY",   "Google Safe Browsing (phishing check)"),
     ("ABUSEIPDB_API_KEY",              "AbuseIPDB (sender IP reputation)"),
@@ -387,7 +387,7 @@ def verify_structure() -> Tuple[int, int, List[str]]:
             warn(".env created from .env.example — fill in your API keys!")
         else:
             env.write_text(
-                "GEMINI_API_KEY=your_gemini_key_here\n"
+                "OPENAI_API_KEY=your_openai_key_here\n"
                 "VIRUSTOTAL_API_KEY=your_virustotal_key_here\n"
                 "GOOGLE_SAFE_BROWSING_API_KEY=your_gsb_key_here\n"
                 "ABUSEIPDB_API_KEY=your_abuseipdb_key_here\n"
@@ -494,7 +494,7 @@ def verify_api_keys() -> Tuple[int, int]:
         info("API keys are optional for basic usage — they enable:")
         info("  VirusTotal/AbuseIPDB/URLScan → URL reputation scoring")
         info("  Google Safe Browsing         → phishing URL cross-check")
-        info("  Gemini                       → AI email analysis layer")
+        info("  ChatGPT                      → AI email analysis layer")
         info("  All are FREE to register (see PhishLens.md Section 3)")
 
     return configured, placeholder

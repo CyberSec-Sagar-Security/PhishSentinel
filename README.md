@@ -11,7 +11,7 @@
 
 > **Portfolio Project** — B.Sc. Information Technology → MSc Cybersecurity  
 > A production-ready, multi-layer phishing email detection system combining classical ML,  
-> deep NLP embeddings, threat intelligence APIs, and Google Gemini AI.
+> deep NLP embeddings, threat intelligence APIs, and ChatGPT AI.
 
 ---
 
@@ -32,7 +32,7 @@ Raw Email
 │ Layer 5: TF-IDF Vocabulary Signals                              │ 500 features
 │ Layer 6: Threat Intelligence (VirusTotal, GSB, AbuseIPDB, etc.) │  13 features
 │ Layer 7: Isolation Forest Zero-Day Anomaly Detection            │   1 feature
-│ Layer 8: Gemini AI (LLM contextual analysis — optional)         │   2 features
+│ Layer 8: ChatGPT AI (LLM contextual analysis — optional)        │   2 features
 └─────────────────────────────────────────────────────────────────┘
     │
     ▼
@@ -144,7 +144,7 @@ phishlens/
 │   │   ├── html_features.py       # 11 HTML structural anomaly features
 │   │   ├── text_features.py       # 384-dim embeddings + TF-IDF + urgency
 │   │   ├── intelligence.py        # VirusTotal / GSB / AbuseIPDB / URLScan
-│   │   ├── gemini_analyzer.py     # Google Gemini 1.5 Flash AI analysis
+│   │   ├── gemini_analyzer.py     # ChatGPT AI analysis (gpt-4o-mini)
 │   │   └── pipeline.py            # Master FeaturePipeline (fit/transform)
 │   ├── detection/
 │   │   └── anomaly.py             # Isolation Forest zero-day detector
@@ -183,8 +183,8 @@ phishlens/
 PhishLens integrates with five threat intelligence services. Keys are stored in `.env`:
 
 ```env
-GEMINI_API_KEY=your_gemini_key          # Google AI Studio (free tier available)
-VIRUSTOTAL_API_KEY=your_vt_key          # Free: 4 requests/min, 500/day
+OPENAI_API_KEY=your_openai_key          # platform.openai.com/api-keys
+VIROTOTAL_API_KEY=your_vt_key           # Free: 4 requests/min, 500/day
 GOOGLE_SAFE_BROWSING_API_KEY=your_gsb_key  # Free: 10,000 requests/day
 ABUSEIPDB_API_KEY=your_abuseipdb_key    # Free: 1,000 requests/day
 URLSCAN_API_KEY=your_urlscan_key        # Free tier available
@@ -203,7 +203,7 @@ Every prediction includes:
 2. **LIME Local Explanation** — Model-agnostic local approximation  
 3. **SHAP/LIME Agreement Score** — Jaccard similarity of top-5 features (trust indicator)  
 4. **MITRE ATT&CK Mapping** — Detected techniques with evidence and confidence scores  
-5. **Gemini AI Narrative** — Plain English explanation (optional, requires API key)
+5. **ChatGPT AI Narrative** — Plain English explanation (optional, requires OpenAI API key)
 
 ---
 
@@ -245,7 +245,7 @@ targeting brands not in training data.
 | Limitation | Impact | Mitigation |
 |---|---|---|
 | Training data staleness | 6-month decay estimated | Retrain quarterly |
-| Targeted spear-phishing | May evade without brand in training | Gemini AI + Isolation Forest |
+| Targeted spear-phishing | May evade without brand in training | ChatGPT AI + Isolation Forest |
 | API rate limits | Intelligence enrichment slowed | Fallback to -1 (offline mode) |
 | Encrypted content | Can't analyse S/MIME encrypted bodies | Header-only analysis |
 | Image-only phishing | Minimal text features | HTML image ratio feature |

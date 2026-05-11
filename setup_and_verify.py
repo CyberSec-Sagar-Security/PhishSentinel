@@ -211,7 +211,7 @@ def ensure_project_structure() -> None:
             _warn(".env copied from .env.example — add your real API keys!")
         else:
             env_file.write_text(
-                "GEMINI_API_KEY=your_gemini_key_here\n"
+                "OPENAI_API_KEY=your_openai_key_here\n"
                 "VIRUSTOTAL_API_KEY=your_virustotal_key_here\n"
                 "GOOGLE_SAFE_BROWSING_API_KEY=your_gsb_key_here\n"
                 "ABUSEIPDB_API_KEY=your_abuseipdb_key_here\n"
