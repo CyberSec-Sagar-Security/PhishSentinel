@@ -1,26 +1,91 @@
-# Root-level .gitignore for PhishLens workspace
-# The phishlens/ subdirectory has its own .gitignore for source-level rules.
+# PhishSentinel .gitignore
 
-# Raw dataset archives — large, not for VCS
-*.zip
-*.tar.gz
-*.tar.bz2
+# Environment & secrets — NEVER commit API keys
+.env
+*.env.local
 
-# Internal project planning/state documents — not for public repo
-PHISHLENS_MASTER_PROMPT.md
-TEMP_PROJECT_STATE.md
-PhishLens.md
-app.py
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+dist/
+*.egg-info/
+.eggs/
+*.egg
+pip-wheel-metadata/
 
-# MLflow SQLite database (runtime artefact)
+# Virtual environments
+venv/
+env/
+.venv/
+ENV/
+
+# Jupyter
+.ipynb_checkpoints/
+*.ipynb
+
+# Raw data — do not commit email corpora (privacy/legal)
+data/raw/*.csv
+data/raw/*.eml
+data/raw/*.mbox
+data/raw/*.json
+data/raw/*.zip
+data/raw/*/
+data/processed/
+data/processed/embedding_cache/
+
+# Model files — large binaries; use HF Hub for storage
+models/*.pkl
+models/*.joblib
+models/*.bin
+models/*.pt
+models/*.pth
+models/saved/*.pkl
+models/saved/*.joblib
+models/saved/*.bin
+models/saved/*.pt
+models/saved/*.pth
+
+# MLflow tracking
+mlruns/
 mlflow.db
 
-# CatBoost training artefacts
-catboost_info/
+# Test coverage
+.coverage
+htmlcov/
+.pytest_cache/
+.tox/
 
-# Logs
-logs/
+# Reports (auto-generated)
+reports/figures/*.pdf
+reports/model_comparison.csv
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
 
 # OS
 .DS_Store
 Thumbs.db
+
+# Logs
+*.log
+logs/
+
+# CatBoost training artefacts
+catboost_info/
+
+# Raw dataset archives
+*.zip
+*.tar.gz
+*.tar.bz2
+
+# Internal project planning/state documents
+PHISHLENS_MASTER_PROMPT.md
+TEMP_PROJECT_STATE.md
+PhishLens.md
