@@ -1,0 +1,110 @@
+name: PhishLens CI
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main]
+
+jobs:
+  test:
+    name: Test (Python 3.13, Ubuntu)
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.13
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+          cache: "pip"
+
+      - name: Install dependencies
+        working-directory: phishlens
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Lint with flake8
+        working-directory: phishlens
+        run: |
+          pip install flake8
+          flake8 src/ train.py app.py \
+            --max-line-length=120 \
+            --ignore=E501,W503,E203 \
+            --exclude=__pycache__,.venv
+
+      - name: Run tests with coverage
+        working-directory: phishlens
+        env:
+          # Provide dummy API keys so tests don't fail on missing env vars
+          GEMINI_API_KEY: "test-key-not-real"
+          VIRUSTOTAL_API_KEY: "test-key-not-real"
+          GOOGLE_SAFE_BROWSING_API_KEY: "test-key-not-real"
+          ABUSEIPDB_API_KEY: "test-key-not-real"
+          URLSCAN_API_KEY: "test-key-not-real"
+          IPQS_API_KEY: "test-key-not-real"
+          OPENAI_API_KEY: "test-key-not-real"
+        run: |
+          pytest tests/ \
+            --cov=src \
+            --cov-report=xml:coverage.xml \
+            --cov-report=term-missing \
+            --cov-fail-under=70 \
+            -v \
+            --timeout=60
+
+      - name: Upload coverage to Codecov
+        uses: codecov/codecov-action@v4
+        with:
+          file: phishlens/coverage.xml
+          flags: unittests
+          fail_ci_if_error: false
+
+  security-scan:
+    name: Security Scan (Bandit)
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.13
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+
+      - name: Install Bandit
+        run: pip install bandit[toml]
+
+      - name: Run Bandit security scan
+        working-directory: phishlens
+        run: |
+          bandit -r src/ train.py \
+            -ll \
+            --skip B101,B311 \
+            --format txt
+
+  dependency-audit:
+    name: Dependency Vulnerability Audit
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.13
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+
+      - name: Install pip-audit
+        run: pip install pip-audit
+
+      - name: Audit dependencies
+        working-directory: phishlens
+        run: |
+          pip install -r requirements.txt --quiet
+          pip-audit --ignore-vuln PYSEC-2022-42969 || true

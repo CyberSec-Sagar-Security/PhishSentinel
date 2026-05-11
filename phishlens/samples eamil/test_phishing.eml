@@ -1,0 +1,39 @@
+Return-Path: <phishing@suspicious-paypal.com>
+Received: from mail.suspicious-paypal.com (mail.suspicious-paypal.com [203.0.113.15])
+	by mx.gmail.com with ESMTP id abc123def456
+	for <victim@gmail.com>; Fri, 28 Jun 2025 20:55:00 +0000 (UTC)
+Message-ID: <12345@suspicious-paypal.com>
+Date: Fri, 28 Jun 2025 20:55:00 +0000
+From: PayPal Security <security@suspicious-paypal.com>
+To: victim@gmail.com
+Subject: URGENT: Your PayPal Account Will Be Suspended
+MIME-Version: 1.0
+Content-Type: text/html; charset=UTF-8
+
+<!DOCTYPE html>
+<html>
+<body>
+<h2>PayPal Account Security Alert</h2>
+<p>Dear Valued Customer,</p>
+
+<p><strong>URGENT ACTION REQUIRED:</strong> We have detected unusual activity on your PayPal account. 
+Your account will be suspended within 24 hours unless you verify your information immediately.</p>
+
+<p>To avoid suspension, please click the link below and verify your account details:</p>
+
+<p><a href="https://paypal-verification.suspicious-site.com/login">Verify Your Account Now</a></p>
+
+<p>If you do not complete verification within 24 hours, your account will be permanently suspended 
+and you will lose access to all funds.</p>
+
+<p>Please click here to update your payment information: 
+<a href="https://paypal-secure-login.fake-domain.com">Update Payment Info</a></p>
+
+<p>Thank you for your immediate attention to this matter.</p>
+
+<p>Sincerely,<br>
+PayPal Security Team<br>
+Copyright © PayPal Inc.</p>
+
+</body>
+</html>

@@ -1,0 +1,153 @@
+From: PayPal Merchant Services <merchant-services@paypal-invoicing.net>
+To: recipient@example.com
+Reply-To: noreply-confirm@paypal-invoicing.net
+Return-Path: bounce-7f3a@paypal-invoicing.net
+Message-ID: <20260509.83742619.pp-merchant@paypal-invoicing.net>
+Date: Fri, 09 May 2026 08:14:32 +0000
+Subject: Q2 2026 Merchant Account Statement - Action Requested by May 15
+MIME-Version: 1.0
+Content-Type: text/html; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+X-Mailer: Postfix MTA 3.6.4
+X-Priority: 3 (Normal)
+Authentication-Results: paypal-invoicing.net; spf=pass smtp.mailfrom=paypal-invoicing.net
+Received: from mail1.paypal-invoicing.net (mail1.paypal-invoicing.net [91.218.114.202])
+        by mx.example.com with ESMTP id q7b3k2a1
+        for <recipient@example.com>; Fri, 09 May 2026 08:14:35 +0000
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0">
+<title>PayPal Merchant Statement</title>
+<style>
+  body { font-family: 'Helvetica Neue', Arial, sans-serif; background:#f5f5f5; margin:0; padding:0; color:#333; }
+  .wrapper { max-width:620px; margin:30px auto; background:#ffffff; border:1px solid #dde0e6; border-radius:4px; }
+  .header { background:#003087; padding:20px 30px; border-radius:4px 4px 0 0; }
+  .header img { height:28px; }
+  .header-title { color:#ffffff; font-size:13px; text-align:right; margin-top:4px; }
+  .body { padding:30px 30px 20px 30px; }
+  .body h2 { font-size:20px; font-weight:600; color:#1a1a2e; margin-top:0; }
+  .body p { font-size:14px; line-height:1.6; color:#444; }
+  .summary-table { width:100%; border-collapse:collapse; margin:20px 0; font-size:13px; }
+  .summary-table th { background:#f0f4f8; color:#555; text-align:left; padding:8px 10px; border-bottom:1px solid #dde0e6; }
+  .summary-table td { padding:8px 10px; border-bottom:1px solid #eef0f3; color:#333; }
+  .cta-row { text-align:center; margin:24px 0 16px 0; }
+  .cta-btn { background:#0070ba; color:#ffffff !important; text-decoration:none; padding:11px 32px;
+             border-radius:3px; font-size:14px; font-weight:600; display:inline-block; }
+  .notice { background:#fff8e1; border-left:3px solid #f5a623; padding:10px 14px;
+            font-size:13px; margin:20px 0; border-radius:2px; }
+  .footer { background:#f8f9fb; border-top:1px solid #dde0e6; padding:16px 30px;
+            font-size:11px; color:#888; text-align:center; border-radius:0 0 4px 4px; }
+  .footer a { color:#888; text-decoration:underline; }
+  /* Anti-scraping honeypot text — invisible to human readers */
+  .hp { display:none; font-size:0; color:#ffffff; height:0; overflow:hidden; }
+</style>
+</head>
+<body>
+<div class="wrapper">
+
+  <!-- Header -->
+  <div class="header">
+    <table width="100%" cellpadding="0" cellspacing="0">
+      <tr>
+        <td>
+          <!-- Inline SVG wordmark avoids external image request -->
+          <svg width="80" height="24" viewBox="0 0 80 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <text x="0" y="18" font-family="Arial" font-size="18" font-weight="bold" fill="#ffffff">PayPal</text>
+          </svg>
+        </td>
+        <td class="header-title">Merchant Services Portal</td>
+      </tr>
+    </table>
+  </div>
+
+  <!-- Body -->
+  <div class="body">
+    <h2>Your Q2 2026 Merchant Statement Is Ready</h2>
+    <p>Dear Merchant,</p>
+    <p>
+      Your quarterly account statement for the period <strong>1 April – 30 June 2026</strong>
+      has been compiled and is available for review. A summary of your account activity is
+      provided below for reference.
+    </p>
+
+    <!-- Summary table -->
+    <table class="summary-table">
+      <tr>
+        <th>Period</th><th>Transactions</th><th>Gross Volume</th><th>Net Settled</th>
+      </tr>
+      <tr>
+        <td>Q1 2026</td><td>2,841</td><td>$148,320.00</td><td>$143,711.04</td>
+      </tr>
+      <tr>
+        <td>Q2 2026 (to date)</td><td>1,203</td><td>$61,490.00</td><td>$59,624.30</td>
+      </tr>
+    </table>
+
+    <div class="notice">
+      <strong>Action required by 15 May 2026:</strong> To comply with updated PCI-DSS v4.0
+      reporting obligations, merchants processing over $25,000 per quarter are required to
+      confirm their billing address and tax identification details via the Merchant Portal.
+      Failure to confirm before the deadline may result in a temporary processing hold.
+    </div>
+
+    <p>
+      To review your full statement and complete the required confirmation, please access
+      your Merchant Portal account using the secure link below. The confirmation process
+      takes approximately two minutes.
+    </p>
+
+    <div class="cta-row">
+      <!--
+        The href points to the actual phishing domain.
+        The visible anchor text and button label look completely legitimate.
+        The URL is further obscured by a redirect-style path component.
+      -->
+      <a class="cta-btn"
+         href="http://00ql.paypal-merchant.ru/portal/confirm?ref=Q2-2026-stmt&mid=7f3a9c&src=email"
+         target="_blank"
+         rel="noopener">
+        Review Statement &amp; Confirm Details
+      </a>
+    </div>
+
+    <p style="font-size:12px; color:#888;">
+      If the button above does not load, copy and paste the following address into your
+      browser's address bar:<br>
+      <span style="color:#888; font-size:11px;">
+        https://www.paypal.com/merchantportal/statements/confirm
+      </span>
+    </p>
+    <!--
+      Note: the plain-text "decoy" URL above is paypal.com but the actual href
+      in the CTA button above routes to the phishing domain.
+    -->
+
+    <p>
+      For questions about your statement, contact Merchant Support Monday–Friday,
+      9 am – 6 pm ET at <a href="mailto:merchant-support@paypal.com" style="color:#0070ba;">
+      merchant-support@paypal.com</a> or via the Help Centre.
+    </p>
+
+    <!-- Invisible honeypot content (common phishing obfuscation) -->
+    <span class="hp">paypal account verify login secure</span>
+  </div>
+
+  <!-- Footer -->
+  <div class="footer">
+    <p>
+      PayPal, Inc. · 2211 North First Street · San Jose, CA 95131<br>
+      This message was sent to <a href="#">recipient@example.com</a> because you are enrolled
+      in the PayPal Merchant Programme.<br>
+      <a href="#">Manage preferences</a> &nbsp;|&nbsp;
+      <a href="#">Privacy Statement</a> &nbsp;|&nbsp;
+      <a href="#">Terms of Service</a>
+    </p>
+    <p style="color:#bbb;">© 2026 PayPal, Inc. All rights reserved.</p>
+  </div>
+
+</div>
+</body>
+</html>

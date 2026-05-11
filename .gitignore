@@ -1,0 +1,26 @@
+# Root-level .gitignore for PhishLens workspace
+# The phishlens/ subdirectory has its own .gitignore for source-level rules.
+
+# Raw dataset archives — large, not for VCS
+*.zip
+*.tar.gz
+*.tar.bz2
+
+# Internal project planning/state documents — not for public repo
+PHISHLENS_MASTER_PROMPT.md
+TEMP_PROJECT_STATE.md
+PhishLens.md
+app.py
+
+# MLflow SQLite database (runtime artefact)
+mlflow.db
+
+# CatBoost training artefacts
+catboost_info/
+
+# Logs
+logs/
+
+# OS
+.DS_Store
+Thumbs.db
