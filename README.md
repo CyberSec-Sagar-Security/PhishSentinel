@@ -1,13 +1,4 @@
----
-title: PhishLens
-emoji: 🛡️
-colorFrom: red
-colorTo: blue
-sdk: streamlit
-sdk_version: 1.57.0
-app_file: app.py
-pinned: true
----
+
 
 # 🛡️ PhishLens — ML Phishing Email Detection System
 
@@ -18,7 +9,7 @@ pinned: true
 [![Security: Bandit](https://img.shields.io/badge/security-bandit-yellow.svg)](https://bandit.readthedocs.io/)
 [![HuggingFace Spaces](https://img.shields.io/badge/🤗%20HuggingFace-Spaces-orange)](https://huggingface.co/spaces/CyberSec-Sagar-Security/PhishLens)
 
-> **Final Year Portfolio Project** — B.Sc. Information Technology → MSc Cybersecurity  
+> **Portfolio Project** — B.Sc. Information Technology → MSc Cybersecurity  
 > A production-ready, multi-layer phishing email detection system combining classical ML,  
 > deep NLP embeddings, threat intelligence APIs, and Google Gemini AI.
 
@@ -51,19 +42,6 @@ ML Ensemble (XGBoost + LightGBM + CatBoost + RF + LR)
 SHAP + LIME Explanation + MITRE ATT&CK Mapping + IOC Export
 ```
 
----
-
-## � Live Demo
-
-**[▶ Try PhishLens on HuggingFace Spaces](https://huggingface.co/spaces/CyberSec-Sagar-Security/PhishLens)**
-
-> Paste any raw email into the input box. PhishLens returns a risk score (0–100),  
-> a SHAP waterfall chart showing the top contributing features, and an IOC extraction  
-> panel mapping detected artefacts to MITRE ATT&CK techniques.
-
-<!-- demo_screenshot.png will be added after the first deployment -->
-
----
 
 ## 🏆 Model Performance
 
@@ -281,18 +259,6 @@ The full training pipeline on 168,608 emails completes in **21.4 minutes** with 
 
 See [GPU_SETUP.md](GPU_SETUP.md) for CUDA installation instructions and performance benchmarks.
 
----
-
-## 🔬 Technical References
-
-1. Liu, F.T., Ting, K.M., & Zhou, Z.H. (2008). *Isolation Forest*. ICDM 2008.
-2. Lundberg, S.M. & Lee, S.I. (2017). *A unified approach to interpreting model predictions*. NeurIPS 2017.
-3. Ribeiro, M.T., Singh, S., & Guestrin, C. (2016). *"Why should I trust you?"*. ICML 2016.
-4. Reimers, N. & Gurevych, I. (2019). *Sentence-BERT: Sentence Embeddings using Siamese BERT-Networks*. EMNLP 2019.
-5. MITRE ATT&CK Framework. (2024). *T1566: Phishing*. https://attack.mitre.org/techniques/T1566/
-6. Chen, T. & Guestrin, C. (2016). *XGBoost: A Scalable Tree Boosting System*. KDD 2016.
-
----
 
 ## 📜 License
 
@@ -303,7 +269,6 @@ MIT License — See [LICENSE](LICENSE) for details.
 ## 👤 Author
 
 **Sagar**  
-B.Sc. Information Technology (Final Year) → MSc Cybersecurity  
 Portfolio project demonstrating ML security engineering skills.
 
 > *"The best firewall is a good detector."*
