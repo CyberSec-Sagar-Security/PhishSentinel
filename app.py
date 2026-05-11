@@ -48,7 +48,7 @@ if str(_ROOT) not in sys.path:
 try:
     from src.ingestion.eml_parser import parse_eml_file, parse_eml_string
     from src.features.pipeline import FeaturePipeline
-    from src.ioc_extractor import extract_iocs
+    from src.ioc_extractor import extract_iocs, generate_ioc_explanations, iocs_to_misp_json, iocs_to_syslog
     from src.attack_mapping import map_attack_techniques
     from src.features.openai_analyzer import analyse_email_with_openai
     from src.utils.config import DEFAULT_CONFIG
@@ -152,6 +152,54 @@ st.markdown("""
 /* Feature bar */
 .feat-bar-container { background:#21262d; border-radius:4px; overflow:hidden; height:10px; }
 .feat-bar-fill      { height:10px; border-radius:4px; transition:width .3s; }
+
+/* ── Dark Sidebar ─────────────────────────────────────────────────────────── */
+[data-testid="stSidebar"] {
+    background: #0d1117 !important;
+    border-right: 1px solid #30363d !important;
+}
+[data-testid="stSidebar"] p,
+[data-testid="stSidebar"] label,
+[data-testid="stSidebar"] .stMarkdown,
+[data-testid="stSidebar"] .stCaption,
+[data-testid="stSidebar"] span:not([data-testid="stMetricDelta"]),
+[data-testid="stSidebar"] div {
+    color: #c9d1d9 !important;
+}
+[data-testid="stSidebar"] h1,
+[data-testid="stSidebar"] h2,
+[data-testid="stSidebar"] h3,
+[data-testid="stSidebar"] h4 {
+    color: #e6edf3 !important;
+}
+[data-testid="stSidebar"] .stTextInput input {
+    background: #161b22 !important;
+    border-color: #30363d !important;
+    color: #c9d1d9 !important;
+}
+[data-testid="stSidebar"] [data-baseweb="select"] > div {
+    background: #161b22 !important;
+    border-color: #30363d !important;
+    color: #c9d1d9 !important;
+}
+[data-testid="stSidebar"] [data-baseweb="slider"] div[role="slider"] {
+    background: #58a6ff !important;
+}
+[data-testid="stSidebar"] .stSlider > div > div > div {
+    background: #30363d !important;
+}
+[data-testid="stSidebar"] hr { border-color: #30363d !important; }
+[data-testid="stSidebar"] .stToggle label { color: #c9d1d9 !important; }
+[data-testid="stSidebar"] .stSelectbox label { color: #8b949e !important; }
+[data-testid="stSidebar"] .stTextInput label { color: #8b949e !important; }
+[data-testid="stSidebar"] .stSlider label { color: #8b949e !important; }
+[data-testid="stSidebar"] [data-testid="stMetric"] {
+    background: #161b22 !important;
+    border: 1px solid #30363d !important;
+    border-radius: 6px !important;
+    padding: 8px 12px !important;
+}
+[data-testid="stSidebar"] [data-testid="stMetricValue"] { color: #58a6ff !important; }
 </style>
 """, unsafe_allow_html=True)
 
@@ -205,75 +253,84 @@ def load_model(model_filename: str):
 # ── Sidebar ───────────────────────────────────────────────────────────────────
 def render_sidebar() -> Dict:
     """Render sidebar controls and return configuration dict."""
-    st.sidebar.markdown("## ⚙️ Analysis Options")
 
-    # Model selection
-    st.sidebar.markdown("### 🤖 ML Model")
+    # ── Badge ─────────────────────────────────────────────────────────────
+    st.sidebar.markdown(
+        '<div style="background:linear-gradient(135deg,#0969da,#218bff);color:white;'
+        'border-radius:10px;padding:14px 20px;text-align:center;margin-bottom:12px;'
+        'font-weight:900;font-size:1.15em;letter-spacing:1.5px;'
+        'box-shadow:0 2px 8px rgba(9,105,218,.4);">🛡️&nbsp;&nbsp;PHISHLENS V1.0</div>',
+        unsafe_allow_html=True,
+    )
+
+    # ── ⚙️ Settings ───────────────────────────────────────────────────────
+    st.sidebar.markdown("### ⚙️ Settings")
+
+    models_dir = st.sidebar.text_input(
+        "Models directory",
+        value=str(MODELS_DIR),
+        help="Path to the directory containing .pkl model files.",
+    )
+
     selected_model = st.sidebar.selectbox(
-        "Choose classifier",
+        "Active Model",
         list(AVAILABLE_MODELS.keys()),
         index=0,
-        help="LightGBM achieves best F1 (0.9505) and AUC-ROC (0.9941) on the test set.",
+        help="LightGBM achieves best F1 (0.9505) on the test set.",
     )
-    if selected_model in MODEL_METRICS:
-        m = MODEL_METRICS[selected_model]
-        st.sidebar.markdown(
-            f"<small>F1: **{m['f1']:.4f}** · AUC: **{m['auc']:.4f}** · "
-            f"FNR: **{m['fnr']:.2%}** · FPR: **{m['fpr']:.2%}**</small>",
-            unsafe_allow_html=True,
-        )
 
-    st.sidebar.markdown("---")
-
-    # Threshold
-    st.sidebar.markdown("### 🎚️ Decision Threshold")
     threshold = st.sidebar.slider(
-        "Phishing threshold",
+        "Confidence Threshold",
         min_value=0.1,
         max_value=0.9,
         value=0.50,
         step=0.01,
-        help="Probability above this → PHISHING verdict. Lower = more sensitive (higher FPR). Higher = more conservative (higher FNR).",
+        format="%.2f",
+        help="Probability above this → PHISHING. Lower = more sensitive.",
     )
 
     st.sidebar.markdown("---")
 
-    # Feature toggles
-    st.sidebar.markdown("### 🔧 Feature Modules")
-    use_network     = st.sidebar.toggle("Network lookups (WHOIS/cert)", value=False, help="Enables WHOIS and crt.sh lookups for URL features. Adds ~3-10s per email.")
-    use_intelligence = st.sidebar.toggle("Threat Intelligence APIs", value=False, help="Queries VirusTotal, Google Safe Browsing, URLScan, URLhaus, AbuseIPDB, IPQS. Requires API keys in .env.")
-    use_chatgpt     = st.sidebar.toggle("ChatGPT forensic analysis", value=False, help="Sends full forensic context to ChatGPT gpt-4.1-mini. Requires OPENAI_API_KEY.")
-    use_shap        = st.sidebar.toggle("SHAP explainability", value=True, help="Compute SHAP feature importance for the verdict. May add 2-5s.")
+    # ── 🔌 Enrichment ─────────────────────────────────────────────────────
+    st.sidebar.markdown("### 🔌 Enrichment")
+
+    use_intelligence = st.sidebar.toggle(
+        "Threat Intelligence APIs",
+        value=False,
+        help="Queries VirusTotal, Google Safe Browsing, URLScan, URLhaus, AbuseIPDB, IPQS. Requires API keys in .env.",
+    )
+    use_chatgpt = st.sidebar.toggle(
+        "ChatGPT Analysis (gpt-4.1-mini)",
+        value=False,
+        help="Sends forensic context to ChatGPT gpt-4.1-mini. Requires OPENAI_API_KEY.",
+    )
+    use_shap = st.sidebar.toggle(
+        "SHAP Explainability",
+        value=True,
+        help="Compute SHAP feature importance for the verdict.",
+    )
+    use_network = st.sidebar.toggle(
+        "Network Lookups (WHOIS/cert)",
+        value=False,
+        help="Enables WHOIS and crt.sh lookups for URL features. Adds ~3-10s per email.",
+    )
 
     st.sidebar.markdown("---")
 
-    # API key status
-    st.sidebar.markdown("### 🔑 API Key Status")
-    _show_api_status()
-
-    st.sidebar.markdown("---")
-
-    # Model performance table
-    with st.sidebar.expander("📊 All model benchmarks"):
-        df = pd.DataFrame(MODEL_METRICS).T.reset_index()
-        df.columns = ["Model", "F1", "AUC-ROC", "FNR", "FPR"]
-        df = df.sort_values("F1", ascending=False)
-        st.dataframe(
-            df.style.format({"F1": "{:.4f}", "AUC-ROC": "{:.4f}", "FNR": "{:.2%}", "FPR": "{:.2%}"}),
-            hide_index=True,
-            use_container_width=True,
-        )
-
-    st.sidebar.markdown("---")
+    # ── Footer ────────────────────────────────────────────────────────────
     st.sidebar.markdown(
-        "<small style='color:#8b949e'>PhishLens v1.0 · 103k-email corpus · "
-        "MITRE ATT&CK integrated<br>"
-        "[GitHub](https://github.com/CyberSec-Sagar-Security/PhishSentinel)</small>",
+        "<small style='color:#8b949e;line-height:1.7'>"
+        "Datasets: 8 sources · 412,265 emails · Best model: LightGBM F1=0.9505<br>"
+        "Models: XGBoost + RF + LightGBM + CatBoost + LR<br>"
+        "Explainability: SHAP + LIME<br>"
+        "by Sagar | MSc Cybersecurity Portfolio"
+        "</small>",
         unsafe_allow_html=True,
     )
 
     return {
         "model_name": selected_model,
+        "models_dir": models_dir,
         "threshold": threshold,
         "use_network": use_network,
         "use_intelligence": use_intelligence,
@@ -298,15 +355,6 @@ def _show_api_status():
 
 
 # ── Main content areas ────────────────────────────────────────────────────────
-def render_header():
-    st.markdown("""
-    <div class="phishlens-header">
-        <h1>🛡️ PhishLens</h1>
-        <p>ML-powered phishing email detection · 961-feature vector · 5 ensemble models · ChatGPT forensic analysis</p>
-    </div>
-    """, unsafe_allow_html=True)
-
-
 def render_input_tabs() -> Tuple[Optional[str], Optional[str]]:
     """Render email input tabs. Returns (raw_email_text, parsed_subject)."""
     tab_upload, tab_paste, tab_sample = st.tabs(
@@ -467,9 +515,16 @@ def run_analysis(raw_email: str, config: Dict) -> Dict:
             )
             results["iocs"] = iocs
             results["attack_techniques"] = iocs.get("attack_techniques", [])
+            # Generate enriched IOC explanations for Forensic Analysis tab
+            try:
+                results["ioc_explanations"] = generate_ioc_explanations(parsed, feature_dict, iocs)
+            except Exception as _exc:
+                log.warning(f"generate_ioc_explanations failed: {_exc}")
+                results["ioc_explanations"] = {}
         except Exception as exc:
             log.warning(f"IOC extraction failed: {exc}")
             results["iocs"] = {}
+            results["ioc_explanations"] = {}
             # Fallback ATT&CK mapping without feature dict
             try:
                 results["attack_techniques"] = map_attack_techniques(
@@ -920,13 +975,13 @@ def render_full_report_download(results: Dict, display_name: str):
 
 # ── Main app ───────────────────────────────────────────────────────────────────
 def main():
-    render_header()
     config = render_sidebar()
 
+    # ── File upload / paste / sample ────────────────────────────────────
     raw_email, display_name = render_input_tabs()
 
     if not raw_email:
-        # Landing page — show quick-start info
+        # Landing page
         st.markdown("---")
         col1, col2, col3 = st.columns(3)
         with col1:
@@ -939,7 +994,7 @@ def main():
             st.markdown("""
             #### 🤖 5 ML Models
             LightGBM · XGBoost · Random Forest · CatBoost · Logistic Regression  
-            All trained on **103,067 labelled emails** with 961-dimensional features.
+            All trained on **412,265 labelled emails** with 961-dimensional features.
             """)
         with col3:
             st.markdown("""
@@ -949,7 +1004,7 @@ def main():
             """)
 
         st.markdown("---")
-        st.markdown("### 📈 Model Performance (103k-email test set)")
+        st.markdown("### 📈 Model Performance")
         perf_df = pd.DataFrame(MODEL_METRICS).T.reset_index()
         perf_df.columns = ["Model", "F1", "AUC-ROC", "FNR", "FPR"]
         perf_df = perf_df.sort_values("F1", ascending=False).reset_index(drop=True)
@@ -963,7 +1018,7 @@ def main():
         )
         return
 
-    # ── Run analysis ──────────────────────────────────────────────────────
+    # ── Analyse button ───────────────────────────────────────────────────
     st.markdown("---")
     t_start = time.perf_counter()
 
@@ -978,88 +1033,317 @@ def main():
     st.markdown(f"<small style='color:#8b949e'>Analysis completed in {elapsed:.2f}s</small>", unsafe_allow_html=True)
     st.markdown("---")
 
-    # ── Verdict banner ─────────────────────────────────────────────────────
+    # ── Verdict banner ────────────────────────────────────────────────────
     render_verdict_banner(results)
 
-    # ── Probability gauge ──────────────────────────────────────────────────
-    try:
-        import plotly.graph_objects as go
-        prob = results["phishing_prob"]
-        gauge_colour = "#d32f2f" if prob >= config["threshold"] else \
-                       "#fbc02d" if prob >= THRESH_UNCERTAIN else "#388e3c"
-        fig = go.Figure(go.Indicator(
-            mode="gauge+number",
-            value=prob * 100,
-            number={"suffix": "%", "font": {"size": 28, "color": "#f0f6fc"}},
-            gauge={
-                "axis": {"range": [0, 100], "tickcolor": "#8b949e", "tickfont": {"color": "#8b949e"}},
-                "bar": {"color": gauge_colour},
-                "bgcolor": "#21262d",
-                "steps": [
-                    {"range": [0, THRESH_UNCERTAIN * 100], "color": "#0d2b0d"},
-                    {"range": [THRESH_UNCERTAIN * 100, config["threshold"] * 100], "color": "#2b1d00"},
-                    {"range": [config["threshold"] * 100, 100], "color": "#2b0000"},
-                ],
-                "threshold": {
-                    "line": {"color": "#f0f6fc", "width": 2},
-                    "thickness": 0.75,
-                    "value": config["threshold"] * 100,
-                },
-            },
-            title={"text": "Phishing Probability", "font": {"color": "#8b949e", "size": 14}},
-            domain={"x": [0, 1], "y": [0, 1]},
-        ))
-        fig.update_layout(
-            paper_bgcolor="#0d1117",
-            font_color="#f0f6fc",
-            height=220,
-            margin={"l": 20, "r": 20, "t": 40, "b": 10},
+    # Escalation notice for PHISHING verdict
+    if results["verdict"] == "PHISHING":
+        st.warning(
+            "⚠️ **High-confidence phishing detected.** Recommend immediate quarantine and user notification. "
+            "Check the Forensic Analysis and IOCs tabs for actionable evidence.",
+            icon="🚨",
         )
-        st.plotly_chart(fig, use_container_width=True)
-    except ImportError:
-        st.metric("Phishing Probability", f"{results['phishing_prob']:.1%}")
 
-    # ── Anomaly score ──────────────────────────────────────────────────────
-    if results.get("anomaly_score") is not None:
-        anomaly = results["anomaly_score"]
-        anomaly_pct = max(0, min(100, int((-anomaly + 0.5) * 100)))
-        st.metric(
-            "Anomaly Score",
-            f"{anomaly:.4f}",
-            help="Isolation Forest anomaly score. More negative = more anomalous. Typical phishing emails score < -0.1.",
-        )
+    # Metric cards row
+    prob = results["phishing_prob"]
+    a_score = results.get("anomaly_score")
+    mc1, mc2, mc3, mc4 = st.columns(4)
+    mc1.metric("Phishing Probability", f"{prob:.1%}")
+    mc2.metric("Model", results["model_name"])
+    mc3.metric("Anomaly Score", f"{a_score:.4f}" if a_score is not None else "N/A")
+    mc4.metric("URLs Found", len(results["parsed"].get("urls", [])))
 
     st.markdown("---")
 
-    # ── Detail tabs ────────────────────────────────────────────────────────
-    tab_summary, tab_iocs, tab_attack, tab_chatgpt, tab_shap, tab_raw = st.tabs([
-        "📧 Email Summary",
-        "🔍 IOCs",
-        "⚔️ MITRE ATT&CK",
-        "🤖 ChatGPT Analysis",
-        "📊 SHAP Explainability",
-        "🔬 Raw Features",
+    # ── 4-tab navigation ──────────────────────────────────────────────────
+    tab_ov, tab_forensic, tab_ioc, tab_ti = st.tabs([
+        "🔍 Overview",
+        "🔬 Forensic Analysis",
+        "📋 IOCs & Evidence",
+        "🌐 Threat Intelligence",
     ])
 
-    with tab_summary:
+    # ── TAB 1: Overview ────────────────────────────────────────────────────
+    with tab_ov:
+        # Probability gauge
+        try:
+            import plotly.graph_objects as go
+            gauge_colour = "#d32f2f" if prob >= config["threshold"] else \
+                           "#fbc02d" if prob >= THRESH_UNCERTAIN else "#388e3c"
+            fig = go.Figure(go.Indicator(
+                mode="gauge+number",
+                value=prob * 100,
+                number={"suffix": "%", "font": {"size": 28, "color": "#f0f6fc"}},
+                gauge={
+                    "axis": {"range": [0, 100], "tickcolor": "#8b949e", "tickfont": {"color": "#8b949e"}},
+                    "bar": {"color": gauge_colour},
+                    "bgcolor": "#21262d",
+                    "steps": [
+                        {"range": [0, THRESH_UNCERTAIN * 100], "color": "#0d2b0d"},
+                        {"range": [THRESH_UNCERTAIN * 100, config["threshold"] * 100], "color": "#2b1d00"},
+                        {"range": [config["threshold"] * 100, 100], "color": "#2b0000"},
+                    ],
+                    "threshold": {
+                        "line": {"color": "#f0f6fc", "width": 2},
+                        "thickness": 0.75,
+                        "value": config["threshold"] * 100,
+                    },
+                },
+                title={"text": "Phishing Probability", "font": {"color": "#8b949e", "size": 14}},
+                domain={"x": [0, 1], "y": [0, 1]},
+            ))
+            fig.update_layout(
+                paper_bgcolor="#0d1117",
+                font_color="#f0f6fc",
+                height=220,
+                margin={"l": 20, "r": 20, "t": 40, "b": 10},
+            )
+            st.plotly_chart(fig, use_container_width=True)
+        except ImportError:
+            st.metric("Phishing Probability", f"{prob:.1%}")
+
+        render_shap(results.get("shap_df"))
+        render_attack_techniques(results.get("attack_techniques", []))
+        render_chatgpt_analysis(results.get("ai_result"))
+
+    # ── TAB 2: Forensic Analysis ────────────────────────────────────────────
+    with tab_forensic:
         render_email_summary(results["parsed"])
         render_email_body(results["parsed"])
 
-    with tab_iocs:
-        render_iocs(results.get("iocs", {}))
+        ioc_exp = results.get("ioc_explanations", {})
 
-    with tab_attack:
-        render_attack_techniques(results.get("attack_techniques", []))
+        # Header findings
+        header_findings = ioc_exp.get("header_findings", [])
+        if header_findings:
+            st.markdown("### 🔒 Header Analysis")
+            for finding in header_findings:
+                sev = finding.get("severity", "LOW")
+                icon = finding.get("icon", "ℹ️")
+                title = finding.get("title", "")
+                detail = finding.get("detail", "")
+                colour = RISK_COLOURS.get(sev, RISK_COLOURS["UNKNOWN"])
+                st.markdown(
+                    f'<div style="border-left:3px solid {colour};padding:6px 12px;margin:4px 0;background:#161b22;border-radius:0 6px 6px 0">'
+                    f'<strong style="color:{colour}">{icon} [{sev}] {title}</strong><br>'
+                    f'<small style="color:#8b949e">{detail}</small></div>',
+                    unsafe_allow_html=True,
+                )
 
-    with tab_chatgpt:
-        render_chatgpt_analysis(results.get("ai_result"))
+        # Sender address analysis
+        email_findings = ioc_exp.get("email_findings", [])
+        if email_findings:
+            st.markdown("### 📧 Sender Address Analysis")
+            for ef in email_findings:
+                addr = ef.get("address", "")
+                addr_type = ef.get("type", "")
+                sev = ef.get("severity", "LOW")
+                flags = ef.get("flags", [])
+                colour = RISK_COLOURS.get(sev, RISK_COLOURS["UNKNOWN"])
+                flags_str = " · ".join(flags) if flags else "—"
+                st.markdown(
+                    f'<div style="border-left:3px solid {colour};padding:6px 12px;margin:4px 0;background:#161b22;border-radius:0 6px 6px 0">'
+                    f'<strong style="color:{colour}">[{sev}]</strong> '
+                    f'<span class="ioc-pill">{addr}</span> '
+                    f'<small style="color:#8b949e">({addr_type})</small><br>'
+                    f'<small style="color:#8b949e">{flags_str}</small></div>',
+                    unsafe_allow_html=True,
+                )
 
-    with tab_shap:
-        render_shap(results.get("shap_df"))
+        # HTML body analysis
+        html_findings = ioc_exp.get("html_findings", [])
+        if html_findings:
+            st.markdown("### 🌐 HTML Body Analysis")
+            for hf in html_findings:
+                sev = hf.get("severity", "LOW")
+                icon = hf.get("icon", "ℹ️")
+                title = hf.get("title", "")
+                detail = hf.get("detail", "")
+                colour = RISK_COLOURS.get(sev, RISK_COLOURS["UNKNOWN"])
+                st.markdown(
+                    f'<div style="border-left:3px solid {colour};padding:6px 12px;margin:4px 0;background:#161b22;border-radius:0 6px 6px 0">'
+                    f'<strong style="color:{colour}">{icon} [{sev}] {title}</strong><br>'
+                    f'<small style="color:#8b949e">{detail}</small></div>',
+                    unsafe_allow_html=True,
+                )
 
-    with tab_raw:
-        if results.get("X") is not None:
+        # URL risk analysis
+        url_findings = ioc_exp.get("url_findings", [])
+        if url_findings:
+            st.markdown("### 🔗 URL Risk Analysis")
+            for uf in url_findings:
+                url = uf.get("url", "")
+                domain = uf.get("domain", "")
+                sev = uf.get("severity", "LOW")
+                risks = uf.get("risks", [])
+                colour = RISK_COLOURS.get(sev, RISK_COLOURS["UNKNOWN"])
+                risks_str = " · ".join(risks) if risks else "—"
+                st.markdown(
+                    f'<div style="border-left:3px solid {colour};padding:6px 12px;margin:4px 0;background:#161b22;border-radius:0 6px 6px 0">'
+                    f'<strong style="color:{colour}">[{sev}]</strong> '
+                    f'<span class="ioc-pill">{url[:100]}{"…" if len(url) > 100 else ""}</span><br>'
+                    f'<small style="color:#8b949e">Domain: {domain} · {risks_str}</small></div>',
+                    unsafe_allow_html=True,
+                )
+
+        if not any([header_findings, email_findings, html_findings, url_findings]):
+            st.info("No forensic findings available. Run analysis with enrichment enabled for full detail.")
+
+    # ── TAB 3: IOCs & Evidence ─────────────────────────────────────────────
+    with tab_ioc:
+        iocs = results.get("iocs", {})
+
+        if not iocs:
+            st.info("No IOCs extracted.")
+        else:
+            # Grids
+            col_a, col_b = st.columns(2)
+            with col_a:
+                sender_emails = iocs.get("sender_emails", [])
+                st.markdown(f"**Sender Emails** ({len(sender_emails)})")
+                for e in sender_emails:
+                    st.markdown(f'<span class="ioc-pill">{e}</span>', unsafe_allow_html=True)
+
+                ips = iocs.get("sender_ips", [])
+                st.markdown(f"**Sender IPs** ({len(ips)})")
+                for ip in ips:
+                    st.markdown(f'<span class="ioc-pill">{ip}</span>', unsafe_allow_html=True)
+
+            with col_b:
+                domains = iocs.get("domains", [])
+                st.markdown(f"**Domains** ({len(domains)})")
+                for d in domains[:20]:
+                    st.markdown(f'<span class="ioc-pill">{d}</span>', unsafe_allow_html=True)
+                if len(domains) > 20:
+                    st.caption(f"… and {len(domains)-20} more")
+
+                urls = iocs.get("urls", [])
+                st.markdown(f"**URLs** ({len(urls)})")
+                for u in urls[:10]:
+                    st.markdown(f'<span class="ioc-pill">{u[:80]}{"…" if len(u)>80 else ""}</span>', unsafe_allow_html=True)
+                if len(urls) > 10:
+                    st.caption(f"… and {len(urls)-10} more")
+
+            # Attachment hashes
+            hashes = iocs.get("attachment_hashes", [])
+            if hashes:
+                st.markdown(f"**Attachment Hashes** ({len(hashes)})")
+                for h in hashes:
+                    st.markdown(f"`{h.get('filename','?')}` — SHA256: `{h.get('sha256','')}`")
+
+            st.markdown("---")
+            # Export buttons
+            exp_col1, exp_col2, exp_col3 = st.columns(3)
+
+            misp_json = iocs_to_misp_json(iocs, campaign_name=display_name or "PhishLens")
+            with exp_col1:
+                st.download_button(
+                    label="⬇️ MISP JSON",
+                    data=misp_json,
+                    file_name="phishlens_misp.json",
+                    mime="application/json",
+                    use_container_width=True,
+                )
+
+            syslog_cef = iocs_to_syslog(iocs, verdict=results["verdict"])
+            with exp_col2:
+                st.download_button(
+                    label="⬇️ Syslog CEF",
+                    data=syslog_cef,
+                    file_name="phishlens_syslog.cef",
+                    mime="text/plain",
+                    use_container_width=True,
+                )
+
+            ioc_txt_lines = []
+            for key in ("sender_emails", "sender_ips", "domains", "urls"):
+                for val in iocs.get(key, []):
+                    ioc_txt_lines.append(str(val))
+            with exp_col3:
+                st.download_button(
+                    label="⬇️ IOC .txt",
+                    data="\n".join(ioc_txt_lines),
+                    file_name="phishlens_iocs.txt",
+                    mime="text/plain",
+                    use_container_width=True,
+                )
+
             render_raw_features(results["X"], results.get("feature_names", []))
+
+    # ── TAB 4: Threat Intelligence ──────────────────────────────────────────
+    with tab_ti:
+        intel = results.get("intel", {})
+        ai_result = results.get("ai_result")
+
+        # Tool-level verdicts
+        TI_TOOLS = [
+            ("VirusTotal",         "vt_",        "🦠"),
+            ("Google Safe Browsing","gsb_",       "🔍"),
+            ("URLhaus",            "urlhaus_",    "🌐"),
+            ("URLScan.io",         "urlscan_",    "🔭"),
+            ("AbuseIPDB",          "abuseipdb_",  "🚫"),
+            ("IPQS",               "ipqs_",       "🔒"),
+        ]
+
+        if intel:
+            st.markdown("### 🌐 Threat Intelligence Tool Verdicts")
+            ti_cols = st.columns(3)
+            for idx, (tool_name, prefix, icon) in enumerate(TI_TOOLS):
+                verdict_key = f"{prefix}verdict"
+                score_key   = f"{prefix}score"
+                verdict_val = intel.get(verdict_key, intel.get(tool_name.lower().replace(" ", "_"), "N/A"))
+                score_val   = intel.get(score_key, "")
+                colour = "#d32f2f" if "MALICIOUS" in str(verdict_val).upper() else \
+                         "#f57c00" if "SUSPICIOUS" in str(verdict_val).upper() else \
+                         "#388e3c" if "CLEAN" in str(verdict_val).upper() else "#757575"
+                with ti_cols[idx % 3]:
+                    st.markdown(
+                        f'<div style="background:#161b22;border:1px solid #30363d;border-radius:8px;padding:10px 14px;margin-bottom:8px">'
+                        f'<strong style="color:#e6edf3">{icon} {tool_name}</strong><br>'
+                        f'<span style="color:{colour};font-weight:bold">{verdict_val}</span>'
+                        f'{f"<small style=\'color:#8b949e\'> ({score_val})</small>" if score_val else ""}'
+                        f'</div>',
+                        unsafe_allow_html=True,
+                    )
+
+            # Per-IOC verification table
+            st.markdown("### 🔎 Per-IOC Verification")
+            ioc_verdicts_all = intel.get("ioc_verdicts", {})
+            if ioc_verdicts_all:
+                rows = []
+                for ioc_val, ioc_info in ioc_verdicts_all.items():
+                    if isinstance(ioc_info, dict):
+                        rows.append({
+                            "IOC": ioc_val,
+                            "Type": ioc_info.get("type", ""),
+                            "Verdict": ioc_info.get("verdict", ""),
+                            "Score": ioc_info.get("score", ""),
+                            "Source": ioc_info.get("source", ""),
+                        })
+                    else:
+                        rows.append({"IOC": ioc_val, "Type": "", "Verdict": str(ioc_info), "Score": "", "Source": ""})
+                if rows:
+                    ioc_df = pd.DataFrame(rows)
+                    st.dataframe(ioc_df, use_container_width=True, hide_index=True)
+        else:
+            st.info(
+                "Threat Intelligence not enabled. Toggle **Threat Intelligence APIs** in the sidebar, "
+                "then re-run the analysis."
+            )
+
+        # ChatGPT IOC verdicts (if available)
+        if ai_result:
+            ioc_verdicts_ai = ai_result.get("gemini_ioc_verdicts", {})
+            if ioc_verdicts_ai:
+                st.markdown("### 🤖 ChatGPT IOC Verdicts")
+                for ioc_v, verdict_v in ioc_verdicts_ai.items():
+                    colour = "#d32f2f" if "MALICIOUS" in str(verdict_v).upper() else \
+                             "#f57c00" if "SUSPICIOUS" in str(verdict_v).upper() else \
+                             "#388e3c" if "CLEAN" in str(verdict_v).upper() else "#757575"
+                    st.markdown(
+                        f'`{ioc_v}` → <span style="color:{colour};font-weight:bold">{verdict_v}</span>',
+                        unsafe_allow_html=True,
+                    )
 
     st.markdown("---")
     render_full_report_download(results, display_name or "unknown")
