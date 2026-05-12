@@ -36,6 +36,24 @@ else:
     # Fallback: try .env in repo root
     load_dotenv(override=True)
 
+# ── HuggingFace Spaces: map underscore-free secret names → canonical names ───
+# HF Spaces secret names only allow letters+digits (no underscores).
+# The app code reads the standard underscore names (VIRUSTOTAL_API_KEY etc.).
+# This block copies HF-safe names into the canonical names so both work.
+_HF_SECRET_MAP = {
+    "VIRUSTOTALAPIKEY":          "VIRUSTOTAL_API_KEY",
+    "GOOGLESAFEBROWSINGAPIKEY":  "GOOGLE_SAFE_BROWSING_API_KEY",
+    "ABUSEIPDBAPI":              "ABUSEIPDB_API_KEY",
+    "URLSCANAPIKEY":             "URLSCAN_API_KEY",
+    "IPQSAPIKEY":                "IPQS_API_KEY",
+    "OPENAIAPIKEY":              "OPENAI_API_KEY",
+    "HFTOKEN":                   "HF_TOKEN",
+}
+for _hf_name, _canonical in _HF_SECRET_MAP.items():
+    _val = os.environ.get(_hf_name, "")
+    if _val and not os.environ.get(_canonical):
+        os.environ[_canonical] = _val
+
 # ── Streamlit page config must be first ──────────────────────────────────────
 st.set_page_config(
     page_title="PhishLens",

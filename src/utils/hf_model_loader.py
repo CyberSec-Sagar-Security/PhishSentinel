@@ -87,7 +87,7 @@ def ensure_models(models_dir: Path) -> bool:
         return False
 
     models_dir.mkdir(parents=True, exist_ok=True)
-    token: str | None = os.getenv("HF_TOKEN") or None  # None → anonymous (public repos)
+    token: str | None = os.getenv("HF_TOKEN") or os.getenv("HFTOKEN") or None  # None → anonymous (public repos)
 
     failed: list[str] = []
     for filename in missing:
