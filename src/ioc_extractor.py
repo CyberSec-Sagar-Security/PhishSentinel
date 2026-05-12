@@ -41,13 +41,55 @@ log = get_logger(__name__)
 # Regex patterns for IOC extraction
 _IP_PATTERN = re.compile(r"\b(?:\d{1,3}\.){3}\d{1,3}\b")
 _EMAIL_PATTERN = re.compile(r"[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}")
-_URL_PATTERN = re.compile(r"https?://[^\s<>\"'\)\(]+", re.IGNORECASE)
-_HASH_MD5 = re.compile(r"\b[a-fA-F0-9]{32}\b")
+_URL_PATTERN = re.compile(r"https?://[^\s<>\"'\)\(\]\[]+", re.IGNORECASE)
+_HASH_MD5    = re.compile(r"\b[a-fA-F0-9]{32}\b")
+_HASH_SHA1   = re.compile(r"\b[a-fA-F0-9]{40}\b")
 _HASH_SHA256 = re.compile(r"\b[a-fA-F0-9]{64}\b")
+_SUSPICIOUS_EXT_RE = re.compile(
+    r"\b\S+\.(?:exe|vbs|bat|cmd|ps1|lnk|iso|img|msi|scr|jar|wsf|hta|vbe|jse)\b",
+    re.IGNORECASE,
+)
 
-# Private/reserved IP ranges to exclude from IOCs
-_PRIVATE_PREFIXES = ("10.", "192.168.", "127.", "0.", "172.16.", "172.17.",
-                     "172.18.", "172.19.", "172.2", "172.3")
+# Private/reserved IP ranges to exclude from IOCs (RFC 1918 + loopback + APIPA)
+_PRIVATE_PREFIXES = (
+    "10.",
+    "192.168.",
+    "127.",
+    "0.",
+    "172.16.", "172.17.", "172.18.", "172.19.",
+    "172.20.", "172.21.", "172.22.", "172.23.",
+    "172.24.", "172.25.", "172.26.", "172.27.",
+    "172.28.", "172.29.", "172.30.", "172.31.",
+    "169.254.",   # APIPA / link-local
+    "100.64.",    # shared address space (RFC 6598)
+    "::1",        # IPv6 loopback
+    "fe80:",      # IPv6 link-local
+)
+
+# ---------------------------------------------------------------------------
+# Defanging helpers (convert analyst-style IOCs back to scannable form)
+# ---------------------------------------------------------------------------
+_DEFANG_HTTP_RE  = re.compile(r"hxxps?://", re.IGNORECASE)
+_DEFANG_DOT_RE   = re.compile(r"\[\.?\]|\(\.\)")
+_DEFANG_COLON_RE = re.compile(r"\[://\]")
+
+
+def _defang_text(text: str) -> str:
+    """Normalise analyst-defanged indicators back to scannable form.
+
+    Converts: ``hxxp[://]evil[.]com`` → ``http://evil.com``
+    """
+    if not text:
+        return text
+    # hxxp / hxxps → http / https
+    text = _DEFANG_HTTP_RE.sub(
+        lambda m: m.group(0).lower().replace("hxxp", "http"), text
+    )
+    # [://] → ://
+    text = _DEFANG_COLON_RE.sub("://", text)
+    # [.] or (.) → .
+    text = _DEFANG_DOT_RE.sub(".", text)
+    return text
 
 # ---------------------------------------------------------------------------
 # MITRE ATT&CK technique mapping (static — curated for phishing context)
@@ -209,6 +251,7 @@ class IOCReport:
 def extract_iocs(
     parsed_email: Dict,
     risk_score: float = -1.0,
+    verdict: str = "UNCERTAIN",
     feature_flags: Optional[Dict] = None,
 ) -> Dict:
     """Extract all IOCs from a parsed email dict.
@@ -260,11 +303,17 @@ def extract_iocs(
             email_addrs.update(matches)
     iocs["sender_emails"] = sorted(email_addrs)
 
-    # --- Sender IPs from Received: headers --------------------------------
+    # --- Sender IPs from Received: headers + X-Originating-IP -----------
     received = parsed_email.get("received_headers", [])
     ips: set = set()
     for header in received:
         for ip in _IP_PATTERN.findall(header):
+            if not any(ip.startswith(p) for p in _PRIVATE_PREFIXES):
+                ips.add(ip)
+    # X-Originating-IP is often more reliable than Received chain
+    for hdr_key in ("x_originating_ip", "x-originating-ip", "x_sender_ip"):
+        x_orig = parsed_email.get(hdr_key, "") or ""
+        for ip in _IP_PATTERN.findall(x_orig):
             if not any(ip.startswith(p) for p in _PRIVATE_PREFIXES):
                 ips.add(ip)
     iocs["sender_ips"] = sorted(ips)
@@ -272,7 +321,9 @@ def extract_iocs(
     # --- URLs — extract then deobfuscate/clean ----------------------------
     urls_raw = parsed_email.get("urls", [])
     # Also extract from body text (catches obfuscated URLs not caught by parser)
-    body = parsed_email.get("body_text", "") or parsed_email.get("body_html", "") or ""
+    # Defang first to catch analyst-style IOCs (hxxp[://]evil[.]com)
+    body_raw = parsed_email.get("body_text", "") or parsed_email.get("body_html", "") or ""
+    body = _defang_text(body_raw)
     urls_from_body = _URL_PATTERN.findall(body)
     all_urls = list(set(urls_raw + urls_from_body))
     # Sanitise: remove trailing punctuation
@@ -321,7 +372,12 @@ def extract_iocs(
     if feature_flags:
         try:
             from src.attack_mapping import map_attack_techniques as _map_atk
-            iocs["attack_techniques"] = _map_atk(feature_flags, iocs)
+            iocs["attack_techniques"] = _map_atk(
+                feature_flags,
+                iocs,
+                phishing_probability=max(0.0, risk_score),
+                verdict=verdict,
+            )
         except Exception as exc:
             log.debug(f"attack_mapping fallback: {exc}")
             iocs["attack_techniques"] = _simple_attack_mapping(iocs)

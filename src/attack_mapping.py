@@ -247,7 +247,35 @@ def map_attack_techniques(
                     "mitre_url": f"https://attack.mitre.org/techniques/{tech_id.replace('.', '/')}/",
                 })
 
-    log.debug(f"Mapped {len(techniques)} ATT&CK techniques")
+    # ── Verdict-based confidence calibration ─────────────────────────────
+    # Many features (having a URL, using HTML, base64 encoding) appear in
+    # perfectly legitimate business email. Calibrate technique confidence to
+    # reflect the actual ML verdict so the ATT&CK map is proportionate.
+    _PHISH_THRESHOLD = 0.65
+
+    if verdict == "LEGITIMATE":
+        # Drop direct phishing-entry techniques — they are false signals for
+        # legitimate email and would mislead SOC analysts.
+        _phish_entry_ids = {"T1566", "T1566.001", "T1566.002", "T1566.003"}
+        techniques = [t for t in techniques if t["technique_id"] not in _phish_entry_ids]
+        # Scale remaining technique confidences down to reflect the low
+        # phishing probability.  Max cap: 30%.
+        scale = min(0.30, max(0.05, phishing_probability) * 3.0)
+        for t in techniques:
+            t["confidence"] = round(t["confidence"] * scale, 2)
+        # Remove near-zero entries — they add noise, not value.
+        techniques = [t for t in techniques if t["confidence"] >= 0.05]
+
+    elif verdict == "UNCERTAIN":
+        # Scale proportionately to how far the probability is from the threshold.
+        scale = min(1.0, max(0.45, phishing_probability / _PHISH_THRESHOLD))
+        for t in techniques:
+            t["confidence"] = round(min(t["confidence"] * scale, 0.80), 2)
+        techniques = [t for t in techniques if t["confidence"] >= 0.05]
+
+    # For PHISHING verdict: keep all techniques at their full computed confidence.
+
+    log.debug(f"Mapped {len(techniques)} ATT&CK techniques (verdict={verdict}, prob={phishing_probability:.2f})")
     return techniques
 
 

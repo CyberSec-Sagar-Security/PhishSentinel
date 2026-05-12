@@ -447,7 +447,14 @@ def render_input_tabs() -> Tuple[Optional[str], Optional[str]]:
 
 
 # ── Intelligence display builder ───────────────────────────────────────────────
-def _build_intel_display(raw: Dict, urls: List[str], sender_ip: Optional[str], sender_email: str) -> Dict:
+def _build_intel_display(
+    raw: Dict,
+    urls: List[str],
+    sender_ip: Optional[str],
+    sender_email: str,
+    url_cleaning_map: Optional[Dict] = None,
+    parsed_email: Optional[Dict] = None,
+) -> Dict:
     """Convert raw intelligence features to a structured display dict."""
     d: Dict[str, Any] = {}
 
@@ -599,6 +606,33 @@ def _build_intel_display(raw: Dict, urls: List[str], sender_ip: Optional[str], s
         }
     d["ioc_verdicts"] = ioc_verdicts
 
+    # ── URL cleaning / unshortening map ─────────────────────────────────
+    d["url_cleaning_map"] = url_cleaning_map or {}
+
+    # ── Auth header signals (SPF / DKIM / DMARC) ────────────────────────
+    if parsed_email:
+        spf_val   = (parsed_email.get("spf", "")   or "").upper()
+        dkim_val  = (parsed_email.get("dkim", "")  or "").upper()
+        dmarc_val = (parsed_email.get("dmarc", "") or "").upper()
+        auth_failures = sum([
+            "FAIL" in spf_val or "REJECT" in spf_val or "SOFTFAIL" in spf_val,
+            "FAIL" in dkim_val or "REJECT" in dkim_val,
+            "FAIL" in dmarc_val or "REJECT" in dmarc_val,
+        ])
+        auth_passes = sum([
+            "PASS" in spf_val,
+            "PASS" in dkim_val,
+            "PASS" in dmarc_val,
+        ])
+        d["auth_failures"] = auth_failures
+        d["auth_passes"]   = auth_passes
+        d["spf_val"]       = spf_val
+        d["dkim_val"]      = dkim_val
+        d["dmarc_val"]     = dmarc_val
+    else:
+        d["auth_failures"] = 0
+        d["auth_passes"]   = 0
+
     return d
 
 
@@ -631,6 +665,7 @@ def _compute_composite_verdict(
     if intel:
         malicious_hits = 0
         suspicious_hits = 0
+        clean_hits = 0
         for tool_key in ("vt_verdict", "gsb_verdict", "urlhaus_verdict",
                          "urlscan_verdict", "abuseipdb_verdict", "ipqs_verdict"):
             v = intel.get(tool_key, "N/A")
@@ -640,6 +675,8 @@ def _compute_composite_verdict(
                 reasons.append(f"TI: {tool_name} flagged as MALICIOUS")
             elif v == "SUSPICIOUS":
                 suspicious_hits += 1
+            elif v == "CLEAN":
+                clean_hits += 1
 
         if malicious_hits >= 1:
             # Any confirmed malicious verdict from TI → push probability above threshold
@@ -648,6 +685,28 @@ def _compute_composite_verdict(
         if suspicious_hits >= 2:
             adjusted = max(adjusted, threshold - 0.01)
             reasons.append(f"TI: {suspicious_hits} sources flagged as SUSPICIOUS")
+
+        # Clean platform consensus: 3+ platforms CLEAN with no malicious hits
+        # → pull probability below UNCERTAIN threshold (requirement: >2 platforms good)
+        if clean_hits >= 3 and malicious_hits == 0 and adjusted < threshold:
+            reduction = 0.05 + 0.02 * max(0, clean_hits - 3)
+            adjusted = min(adjusted, THRESH_UNCERTAIN - reduction)
+            reasons.append(f"TI: {clean_hits} platforms confirmed CLEAN → LEGITIMATE")
+
+    # ── Auth header signals (SPF / DKIM / DMARC) ──────────────────────────
+    if intel:
+        auth_failures = intel.get("auth_failures", 0) or 0
+        auth_passes   = intel.get("auth_passes",   0) or 0
+        _no_malicious = intel.get("vt_verdict", "N/A") != "MALICIOUS" and \
+                        intel.get("gsb_verdict", "N/A") != "MALICIOUS"
+        if auth_failures >= 2:
+            boost = 0.08 * auth_failures
+            adjusted = max(adjusted, ml_prob + boost)
+            reasons.append(f"Auth: {auth_failures} header checks failed (SPF/DKIM/DMARC)")
+        elif auth_passes >= 2 and adjusted < threshold and _no_malicious:
+            reduction = 0.04 * auth_passes
+            adjusted = min(adjusted, ml_prob - reduction)
+            reasons.append(f"Auth: {auth_passes} header checks passed (SPF/DKIM/DMARC)")
 
     adjusted = max(0.0, min(1.0, adjusted))
 
@@ -754,6 +813,7 @@ def run_analysis(raw_email: str, config: Dict) -> Dict:
             iocs = extract_iocs(
                 parsed,
                 risk_score=phishing_prob,
+                verdict=verdict,
                 feature_flags=feature_dict,
             )
             results["iocs"] = iocs
@@ -783,8 +843,13 @@ def run_analysis(raw_email: str, config: Dict) -> Dict:
     if config["use_intelligence"]:
         with st.spinner("Querying threat intelligence APIs (VT · GSB · URLhaus · URLScan · AbuseIPDB · IPQS)…"):
             try:
-                urls_for_ti  = (results.get("iocs", {}) or {}).get("urls", [])[:5]
-                sender_ips   = (results.get("iocs", {}) or {}).get("sender_ips", [])
+                iocs_data = results.get("iocs", {}) or {}
+                # Use cleaned (unwrapped/unshortened) URLs for TI analysis
+                # so SafeLinks / Proofpoint wrappers don’t hide the real domain.
+                urls_for_ti = iocs_data.get("cleaned_urls") or iocs_data.get("urls", [])
+                urls_for_ti = urls_for_ti[:5]
+                url_cleaning_map_ti = iocs_data.get("url_cleaning_map", {})
+                sender_ips   = iocs_data.get("sender_ips", [])
                 sender_ip_ti = sender_ips[0] if sender_ips else None
                 sender_email_ti = parsed.get("from_address", "")
 
@@ -799,7 +864,9 @@ def run_analysis(raw_email: str, config: Dict) -> Dict:
                     intel_raw["_ipqs_ip"] = query_ipqs_ip(sender_ip_ti)
 
                 results["intel"] = _build_intel_display(
-                    intel_raw, urls_for_ti, sender_ip_ti, sender_email_ti
+                    intel_raw, urls_for_ti, sender_ip_ti, sender_email_ti,
+                    url_cleaning_map=url_cleaning_map_ti,
+                    parsed_email=parsed,
                 )
                 results["intel_raw"] = intel_raw
             except Exception as exc:
@@ -1594,18 +1661,75 @@ def main():
         }
 
         if intel:
+            # ── Executive Summary banner ───────────────────────────────────
+            mal_tools   = [t for t, p, _ in TI_TOOLS if intel.get(f"{p}verdict") == "MALICIOUS"]
+            sus_tools   = [t for t, p, _ in TI_TOOLS if intel.get(f"{p}verdict") == "SUSPICIOUS"]
+            clean_tools = [t for t, p, _ in TI_TOOLS if intel.get(f"{p}verdict") == "CLEAN"]
+            na_tools    = [t for t, p, _ in TI_TOOLS if intel.get(f"{p}verdict") in ("N/A", None, "")]
+
+            if mal_tools:
+                exec_colour = "#c53030"; exec_bg = "#fff5f5"; exec_border = "#fc8181"
+                exec_text = f"<b>THREAT CONFIRMED</b> — {len(mal_tools)} platform(s) returned MALICIOUS: {', '.join(mal_tools)}"
+            elif sus_tools:
+                exec_colour = "#c05621"; exec_bg = "#fffaf0"; exec_border = "#f6ad55"
+                exec_text = f"<b>SUSPICIOUS</b> — {len(sus_tools)} platform(s) flagged suspicious: {', '.join(sus_tools)}"
+            elif clean_tools:
+                exec_colour = "#276749"; exec_bg = "#f0fff4"; exec_border = "#68d391"
+                exec_text = (f"<b>CLEAN</b> — {len(clean_tools)} platform(s) confirmed no threats detected."
+                             + (f" <i>({len(na_tools)} not checked)</i>" if na_tools else ""))
+            else:
+                exec_colour = "#718096"; exec_bg = "#f7fafc"; exec_border = "#e2e8f0"
+                exec_text = "<b>NO DATA</b> — API keys not configured for any platform."
+
+            st.markdown(
+                f'<div style="background:{exec_bg};border-left:5px solid {exec_border};'
+                f'border-radius:4px;padding:12px 16px;margin-bottom:16px;color:{exec_colour};font-size:0.95rem">'
+                f'{exec_text}</div>',
+                unsafe_allow_html=True,
+            )
+
+            # ── Auth header summary row ────────────────────────────────────
+            auth_failures = intel.get("auth_failures", 0) or 0
+            auth_passes   = intel.get("auth_passes",   0) or 0
+            spf_val   = intel.get("spf_val",   "")
+            dkim_val  = intel.get("dkim_val",  "")
+            dmarc_val = intel.get("dmarc_val", "")
+            if spf_val or dkim_val or dmarc_val:
+                def _auth_chip(label: str, val: str) -> str:
+                    if "PASS" in val:
+                        colour = "#276749"; bg = "#c6f6d5"; icon = "✅"
+                    elif "FAIL" in val or "REJECT" in val or "SOFTFAIL" in val:
+                        colour = "#c53030"; bg = "#fed7d7"; icon = "❌"
+                    elif val:
+                        colour = "#744210"; bg = "#fefcbf"; icon = "⚠️"
+                    else:
+                        colour = "#718096"; bg = "#edf2f7"; icon = "❓"
+                    short = val[:12] if val else "N/A"
+                    return (
+                        f'<span style="background:{bg};color:{colour};border-radius:12px;'
+                        f'padding:3px 10px;font-size:0.82rem;font-weight:600;margin-right:6px">'
+                        f'{icon} {label}: {short}</span>'
+                    )
+                st.markdown(
+                    "**Email Authentication:** "
+                    + _auth_chip("SPF", spf_val)
+                    + _auth_chip("DKIM", dkim_val)
+                    + _auth_chip("DMARC", dmarc_val),
+                    unsafe_allow_html=True,
+                )
+                if auth_failures >= 2:
+                    st.warning(f"⚠️ {auth_failures} authentication checks failed — strong phishing signal.")
+                elif auth_passes >= 2:
+                    st.success(f"✅ {auth_passes} authentication checks passed — sender infrastructure verified.")
+                st.markdown("")
+
             st.markdown("### 🌐 Threat Intelligence Platform Verdicts")
 
-            # Summary row: count hits
-            mal_tools  = [t for t, p, _ in TI_TOOLS if intel.get(f"{p}verdict") == "MALICIOUS"]
-            sus_tools  = [t for t, p, _ in TI_TOOLS if intel.get(f"{p}verdict") == "SUSPICIOUS"]
-            clean_tools = [t for t, p, _ in TI_TOOLS if intel.get(f"{p}verdict") == "CLEAN"]
-            na_tools   = [t for t, p, _ in TI_TOOLS if intel.get(f"{p}verdict") in ("N/A", None, "")]
-
+            # Summary metric row
             sc1, sc2, sc3, sc4 = st.columns(4)
-            sc1.metric("🔴 Malicious",  len(mal_tools))
-            sc2.metric("🟠 Suspicious", len(sus_tools))
-            sc3.metric("🟢 Clean",      len(clean_tools))
+            sc1.metric("🔴 Malicious",   len(mal_tools))
+            sc2.metric("🟠 Suspicious",  len(sus_tools))
+            sc3.metric("🟢 Clean",       len(clean_tools))
             sc4.metric("⚪ Not Checked", len(na_tools))
             st.markdown("")
 
@@ -1626,6 +1750,32 @@ def main():
                         f'<div style="font-size:1.2rem;font-weight:800;color:{v_colour};margin:6px 0 2px 0">'
                         f'{v_icon} {verdict_val}</div>'
                         f'<div style="font-size:0.78rem;color:#4a5568;line-height:1.4">{score_val}</div>'
+                        f'</div>',
+                        unsafe_allow_html=True,
+                    )
+
+            # ── URL Unshortening / Deobfuscation section ───────────────────
+            url_cleaning_map = intel.get("url_cleaning_map", {})
+            cleaned_entries = [
+                (orig, info) for orig, info in url_cleaning_map.items()
+                if info.get("was_wrapped")
+            ]
+            if cleaned_entries:
+                st.markdown("### 🔗 URL Unshortening / Deobfuscation")
+                st.caption("These URLs were wrapped by email security gateways or shorteners. "
+                           "Both the original wrapper and real destination were analysed.")
+                for orig_url, clean_info in cleaned_entries:
+                    dest = clean_info.get("cleaned", orig_url)
+                    method = clean_info.get("method", "redirect")
+                    dest_display = dest[:120] + ("…" if len(dest) > 120 else "")
+                    orig_display = orig_url[:120] + ("…" if len(orig_url) > 120 else "")
+                    st.markdown(
+                        f'<div style="background:#ebf8ff;border:1px solid #90cdf4;border-radius:8px;'
+                        f'padding:10px 14px;margin-bottom:8px">'
+                        f'<div style="font-size:0.75rem;color:#4a5568;font-weight:600">ORIGINAL (wrapped via {method}):</div>'
+                        f'<div style="font-family:monospace;font-size:0.78rem;color:#2b6cb0;word-break:break-all">{orig_display}</div>'
+                        f'<div style="font-size:0.75rem;color:#4a5568;font-weight:600;margin-top:6px">REAL DESTINATION (analysed by TI):</div>'
+                        f'<div style="font-family:monospace;font-size:0.82rem;color:#c53030;font-weight:600;word-break:break-all">{dest_display}</div>'
                         f'</div>',
                         unsafe_allow_html=True,
                     )
@@ -1653,30 +1803,47 @@ def main():
                         unsafe_allow_html=True,
                     )
 
-            # Per-IOC verification table
-            st.markdown("### 🔎 Per-IOC Verdict Summary")
+            # ── Per-IOC Evidence Table with risk weights ───────────────────
+            st.markdown("### 🔎 Per-IOC Evidence Table")
+            _IOC_WEIGHT = {"URL": "HIGH", "Domain": "HIGH", "Email": "MEDIUM",
+                           "IP": "MEDIUM", "Hash": "CRITICAL", "File": "CRITICAL"}
+            _WEIGHT_COL = {"CRITICAL": "#c53030", "HIGH": "#c05621",
+                           "MEDIUM": "#744210", "LOW": "#276749"}
             ioc_verdicts_all = intel.get("ioc_verdicts", {})
             if ioc_verdicts_all:
                 rows = []
                 for ioc_val, ioc_info in ioc_verdicts_all.items():
                     if isinstance(ioc_info, dict):
+                        ioc_type = ioc_info.get("type", "")
+                        weight = _IOC_WEIGHT.get(ioc_type, "MEDIUM")
                         rows.append({
-                            "IOC":     ioc_val,
-                            "Type":    ioc_info.get("type", ""),
-                            "Verdict": ioc_info.get("verdict", ""),
-                            "Detail":  ioc_info.get("score", ""),
-                            "Source":  ioc_info.get("source", ""),
+                            "IOC":        ioc_val,
+                            "Type":       ioc_type,
+                            "Risk Weight": weight,
+                            "Verdict":    ioc_info.get("verdict", ""),
+                            "Detail":     ioc_info.get("score", ""),
+                            "Source":     ioc_info.get("source", ""),
                         })
                     else:
-                        rows.append({"IOC": ioc_val, "Type": "", "Verdict": str(ioc_info), "Detail": "", "Source": ""})
+                        rows.append({"IOC": ioc_val, "Type": "", "Risk Weight": "MEDIUM",
+                                     "Verdict": str(ioc_info), "Detail": "", "Source": ""})
                 if rows:
                     df = pd.DataFrame(rows)
-                    # Colour the Verdict column via dataframe styling
-                    def _colour_verdict(val):
+                    def _colour_verdict_cell(val):
                         c = _VERDICT_COLOURS.get(str(val).upper(), "#4a5568")
                         return f"color: {c}; font-weight: 600"
-                    styled = df.style.applymap(_colour_verdict, subset=["Verdict"])
+                    def _colour_weight_cell(val):
+                        c = _WEIGHT_COL.get(str(val).upper(), "#4a5568")
+                        return f"color: {c}; font-weight: 600"
+                    styled = (df.style
+                               .applymap(_colour_verdict_cell, subset=["Verdict"])
+                               .applymap(_colour_weight_cell,  subset=["Risk Weight"]))
                     st.dataframe(styled, use_container_width=True, hide_index=True)
+                    st.caption(
+                        "Risk Weight: **CRITICAL** = file hashes (sandbox behaviour) · "
+                        "**HIGH** = domains/URLs (age & reputation) · "
+                        "**MEDIUM** = IPs & email addresses"
+                    )
         else:
             st.info(
                 "Threat Intelligence not enabled. Toggle **Threat Intelligence APIs** in the sidebar, "
