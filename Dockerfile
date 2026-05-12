@@ -32,6 +32,13 @@ RUN pip install --no-cache-dir -r requirements.txt
 # ── Application source ────────────────────────────────────────────────────────
 COPY --chown=user . .
 
+# ── Writable directories for runtime artefacts ───────────────────────────────
+# models/models/ is gitignored; create it here so the non-root user can write
+# downloaded .pkl files into it at startup.  Also ensure logs/ is writable.
+RUN mkdir -p /home/user/app/models/models \
+    && mkdir -p /home/user/app/logs \
+    && chown -R user:user /home/user/app/models /home/user/app/logs
+
 # ── Runtime ───────────────────────────────────────────────────────────────────
 USER user
 EXPOSE 7860
