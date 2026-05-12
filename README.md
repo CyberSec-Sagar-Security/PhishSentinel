@@ -336,7 +336,6 @@ VIRUSTOTAL_API_KEY=your_key    # virustotal.com/gui/join-us (500 req/day free)
 GOOGLE_SAFE_BROWSING_API_KEY=your_key  # console.cloud.google.com (free)
 ABUSEIPDB_API_KEY=your_key     # abuseipdb.com/register (1,000 req/day free)
 URLSCAN_API_KEY=your_key       # urlscan.io/user/signup (free tier)
-GEMINI_API_KEY=your_key        # aistudio.google.com/apikey (free tier)
 IPQS_API_KEY=your_key          # ipqualityscore.com/create-account (free tier)
 HF_TOKEN=your_token            # huggingface.co/settings/tokens (optional)
 ```
