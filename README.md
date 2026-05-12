@@ -16,19 +16,23 @@ license: mit
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![Code Style: Black](https://img.shields.io/badge/code%20style-black-000000.svg)](https://github.com/psf/black)
 [![Security: Bandit](https://img.shields.io/badge/security-bandit-yellow.svg)](https://bandit.readthedocs.io/)
-[![HuggingFace Spaces](https://img.shields.io/badge/🤗%20HuggingFace-Spaces-orange)](https://huggingface.co/spaces/CyberSec-Sagar-Security/PhishSentinel)
+[![HuggingFace Spaces](https://img.shields.io/badge/🤗%20Live%20Demo-HuggingFace%20Spaces-orange)](https://huggingface.co/spaces/SagarTony90265/PhishSentinel)
 
 > **MSc Cybersecurity Portfolio Project — B.Sc. IT → MSc Cybersecurity**
 > A production-ready, multi-layer phishing email detection system combining
 > classical ML, deep NLP embeddings, threat intelligence APIs, and ChatGPT AI.
 >
+> **🚀 Live Demo:** https://huggingface.co/spaces/SagarTony90265/PhishSentinel
 > **GitHub:** https://github.com/CyberSec-Sagar-Security/PhishSentinel &nbsp;|&nbsp; **Python:** 3.13 &nbsp;|&nbsp; **License:** MIT
 
 ---
 
 ## 🎯 Live Demo
 
-> ⚠️ *HuggingFace Spaces deployment in progress — local demo available via Quick Start below.*
+> **✅ PhishSentinel is live on HuggingFace Spaces!**
+> Try it now → **https://huggingface.co/spaces/SagarTony90265/PhishSentinel**
+>
+> Upload a `.eml` / `.msg` file, paste raw email headers, or use the built-in sample emails to see the detection pipeline in action — no installation required.
 
 ![PhishSentinel Demo](docs/demo_screenshot.png)
 
