@@ -34,7 +34,7 @@ license: mit
 >
 > Upload a `.eml` / `.msg` file, paste raw email headers, or use the built-in sample emails to see the detection pipeline in action — no installation required.
 
-![PhishSentinel Demo](docs/demo_screenshot.png)
+<img width="1853" height="913" alt="Demo " src="https://github.com/user-attachments/assets/1017cd3b-1865-40db-838d-3a1c79e85277" />
 
 *PhishSentinel catching a professionally crafted phishing simulation email —
 ML probability 37.3%, escalated to PHISHING via VirusTotal (1 malicious hit)
@@ -416,7 +416,7 @@ MIT License — See [LICENSE](LICENSE) for details.
 B.Sc. Information Technology → MSc Cybersecurity (Ireland)
 Targeting SOC Analyst and Application Security roles in Ireland and the EU.
 
-[![GitHub](https://img.shields.io/badge/GitHub-CyberSec--Sagar--Security-black?logo=github)](https://github.com/CyberSec-Sagar-Security)
-[![LinkedIn](https://img.shields.io/badge/LinkedIn-Connect-blue?logo=linkedin)](https://www.linkedin.com/in/your-linkedin-url)
+[![GitHub](https://img.shields.io/badge/GitHub-CyberSec--Sagar--Security-black?logo=github)](https://github.com/CyberSec-Sagar-Security?tab=repositories)
+[![LinkedIn](https://img.shields.io/badge/LinkedIn-Connect-blue?logo=linkedin)](https://www.linkedin.com/in/sagar--suryawanshi/)
 
 > *"The best firewall is a good detector."*
