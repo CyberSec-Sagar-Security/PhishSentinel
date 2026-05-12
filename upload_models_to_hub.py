@@ -29,6 +29,14 @@ import os
 import sys
 from pathlib import Path
 
+# Load .env automatically (reads HF_TOKEN without needing $env:HF_TOKEN manually)
+try:
+    from dotenv import load_dotenv
+    _env = Path(__file__).parent / "phishlens" / ".env"
+    load_dotenv(dotenv_path=_env if _env.exists() else None, override=False)
+except ImportError:
+    pass
+
 # ── Configuration ─────────────────────────────────────────────────────────────
 HF_MODEL_REPO   = "SagarTony90265/PhishSentinel-models"
 MODELS_DIR      = Path(__file__).parent / "models" / "models"
@@ -63,16 +71,18 @@ def main() -> None:
 
     api = HfApi()
 
-    # Verify repo exists (will raise if not)
+    # Verify or create repo
     try:
         api.repo_info(repo_id=HF_MODEL_REPO, repo_type="model", token=token)
         print(f"[OK] Repo found: https://huggingface.co/{HF_MODEL_REPO}")
-    except Exception as exc:
-        print(
-            f"[ERROR] Cannot access repo '{HF_MODEL_REPO}': {exc}\n"
-            f"Create it at https://huggingface.co/new first."
-        )
-        sys.exit(1)
+    except Exception:
+        print(f"[INFO] Repo not found — creating https://huggingface.co/{HF_MODEL_REPO} …")
+        try:
+            api.create_repo(repo_id=HF_MODEL_REPO, repo_type="model", private=False, token=token, exist_ok=True)
+            print(f"[OK] Repo created.")
+        except Exception as exc2:
+            print(f"[ERROR] Cannot create repo '{HF_MODEL_REPO}': {exc2}")
+            sys.exit(1)
 
     missing = [f for f in REQUIRED_FILES if not (MODELS_DIR / f).exists()]
     if missing:
