@@ -39,4 +39,8 @@ jobs:
           HF_TOKEN: ${{ secrets.HF_TOKEN }}
         run: |
           git remote add hf https://SagarTony90265:${HF_TOKEN}@huggingface.co/spaces/SagarTony90265/PhishSentinel
-          git push hf main:main --force
+          # Push as an orphan (single commit, no history) to avoid binary-file rejections
+          git checkout --orphan hf-deploy-ci
+          git add -A
+          git commit -m "Deploy to HF Spaces ($(git rev-parse --short HEAD 2>/dev/null || echo ci))"
+          git push hf hf-deploy-ci:main --force
