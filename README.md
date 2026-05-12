@@ -35,6 +35,11 @@ license: mit
 > Upload a `.eml` / `.msg` file, paste raw email headers, or use the built-in sample emails to see the detection pipeline in action — no installation required.
 
 <img width="1853" height="913" alt="Demo " src="https://github.com/user-attachments/assets/1017cd3b-1865-40db-838d-3a1c79e85277" />
+<img width="1656" height="966" alt="image" src="https://github.com/user-attachments/assets/3ab1f6fa-5792-42e9-8334-78fd7c1191e1" />
+<img width="1660" height="1016" alt="image" src="https://github.com/user-attachments/assets/74ad91b8-e007-4d0c-ae0a-0b0241b3d381" />
+<img width="1591" height="867" alt="image" src="https://github.com/user-attachments/assets/fe212f30-0b35-4bf4-acab-73b91c04617a" />
+
+
 
 *PhishSentinel catching a professionally crafted phishing simulation email —
 ML probability 37.3%, escalated to PHISHING via VirusTotal (1 malicious hit)
