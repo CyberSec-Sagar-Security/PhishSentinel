@@ -99,12 +99,20 @@ MODELS_DIR = _ROOT / "models" / "models"
 # committed to the git repo (too large); they live in a separate HF model repo
 # and are fetched here once per container lifecycle.
 if os.getenv("SPACE_ID"):
+    _hf_status = st.empty()
+    _hf_status.info("⬇️ Downloading model artefacts from HuggingFace Hub — please wait …")
     try:
         from src.utils.hf_model_loader import ensure_models as _ensure_models
-        _ensure_models(MODELS_DIR)
+        _ok = _ensure_models(MODELS_DIR)
+        if _ok:
+            _hf_status.empty()
+        else:
+            _hf_status.error(
+                "**Model download failed.** Check that `SagarTony90265/PhishSentinel-models` "
+                "exists on HF Hub and the `HFTOKEN` Space secret is set."
+            )
     except Exception as _hf_err:
-        # Non-fatal: load_model() will surface a readable error if files are missing.
-        pass
+        _hf_status.error(f"**Model loader error:** {_hf_err}")
 AVAILABLE_MODELS = {
     "LightGBM":          "lightgbm.pkl",
     "XGBoost":           "xgboost.pkl",
