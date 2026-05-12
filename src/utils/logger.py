@@ -48,8 +48,14 @@ def configure_logger(
     )
 
     # File handler — structured, rotated
+    # On HF Spaces the working directory is read-only for some paths;
+    # fall back to stderr-only if the log directory cannot be created.
     log_path = Path(log_dir)
-    log_path.mkdir(parents=True, exist_ok=True)
+    try:
+        log_path.mkdir(parents=True, exist_ok=True)
+    except PermissionError:
+        # Running in a restricted container (e.g. HF Spaces) — skip file logging
+        return
     logger.add(
         str(log_path / log_file),
         level="DEBUG",
