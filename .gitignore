@@ -38,16 +38,16 @@ data/processed/
 data/processed/embedding_cache/
 
 # Model files — large binaries; use HF Hub for storage
+models/**/*.pkl
+models/**/*.joblib
+models/**/*.bin
+models/**/*.pt
+models/**/*.pth
 models/*.pkl
 models/*.joblib
 models/*.bin
 models/*.pt
 models/*.pth
-models/saved/*.pkl
-models/saved/*.joblib
-models/saved/*.bin
-models/saved/*.pt
-models/saved/*.pth
 
 # MLflow tracking
 mlruns/

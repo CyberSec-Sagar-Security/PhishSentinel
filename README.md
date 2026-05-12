@@ -1,3 +1,14 @@
+---
+title: PhishSentinel
+emoji: 🛡️
+colorFrom: blue
+colorTo: red
+sdk: docker
+app_port: 7860
+pinned: false
+license: mit
+---
+
 # 🛡️ PhishSentinel — ML Phishing Email Detection System
 
 [![CI](https://github.com/CyberSec-Sagar-Security/PhishSentinel/actions/workflows/ci.yml/badge.svg)](https://github.com/CyberSec-Sagar-Security/PhishSentinel/actions)

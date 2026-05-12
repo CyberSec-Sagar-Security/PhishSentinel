@@ -75,6 +75,18 @@ log = get_logger(__name__)
 
 # ── Constants ────────────────────────────────────────────────────────────────
 MODELS_DIR = _ROOT / "models" / "models"
+
+# ── HuggingFace Spaces: download model artefacts from HF Hub if absent ───────
+# On HF Spaces the SPACE_ID env var is injected automatically.  Models are NOT
+# committed to the git repo (too large); they live in a separate HF model repo
+# and are fetched here once per container lifecycle.
+if os.getenv("SPACE_ID"):
+    try:
+        from src.utils.hf_model_loader import ensure_models as _ensure_models
+        _ensure_models(MODELS_DIR)
+    except Exception as _hf_err:
+        # Non-fatal: load_model() will surface a readable error if files are missing.
+        pass
 AVAILABLE_MODELS = {
     "LightGBM":          "lightgbm.pkl",
     "XGBoost":           "xgboost.pkl",
@@ -1836,8 +1848,8 @@ def main():
                         c = _WEIGHT_COL.get(str(val).upper(), "#4a5568")
                         return f"color: {c}; font-weight: 600"
                     styled = (df.style
-                               .applymap(_colour_verdict_cell, subset=["Verdict"])
-                               .applymap(_colour_weight_cell,  subset=["Risk Weight"]))
+                               .map(_colour_verdict_cell, subset=["Verdict"])
+                               .map(_colour_weight_cell,  subset=["Risk Weight"]))
                     st.dataframe(styled, use_container_width=True, hide_index=True)
                     st.caption(
                         "Risk Weight: **CRITICAL** = file hashes (sandbox behaviour) · "

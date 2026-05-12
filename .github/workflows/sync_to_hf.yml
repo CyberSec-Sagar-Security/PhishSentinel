@@ -1,0 +1,42 @@
+name: Sync to HuggingFace Spaces
+
+# Triggers: every push to main, or manually via "Run workflow"
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  sync-to-hf:
+    name: Push code to HF Space
+    runs-on: ubuntu-latest
+
+    steps:
+      # ── 1. Full checkout (depth=0 keeps complete history) ──────────────────
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      # ── 2. Configure git identity ──────────────────────────────────────────
+      - name: Configure git identity
+        run: |
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git config user.name "github-actions[bot]"
+
+      # ── 3. Push to HF Space (force-push keeps Space in sync with main) ──────
+      #
+      # The HF_TOKEN secret must be set in:
+      #   GitHub repo → Settings → Secrets and variables → Actions → New secret
+      #   Name : HF_TOKEN
+      #   Value: your HuggingFace write-access token
+      #           (https://huggingface.co/settings/tokens)
+      #
+      # No API keys are pushed — they are kept in HF Space Secrets only.
+      # ────────────────────────────────────────────────────────────────────────
+      - name: Push to HuggingFace Space
+        env:
+          HF_TOKEN: ${{ secrets.HF_TOKEN }}
+        run: |
+          git remote add hf https://SagarTony90265:${HF_TOKEN}@huggingface.co/spaces/SagarTony90265/PhishSentinel
+          git push hf main:main --force
