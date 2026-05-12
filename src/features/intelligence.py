@@ -35,11 +35,11 @@ from src.utils.logger import get_logger
 log = get_logger(__name__)
 
 # API keys loaded lazily at call time (dotenv may be loaded after module import)
-def _vt_key()():    return os.getenv("VIRUSTOTAL_API_KEY", "")
-def _gsb_key()():   return os.getenv("GOOGLE_SAFE_BROWSING_API_KEY", "")
-def _abuse_key(): return os.getenv("ABUSEIPDB_API_KEY", "")
-def _urlscan_key()(): return os.getenv("URLSCAN_API_KEY", "")
-def _ipqs_key()():  return os.getenv("IPQS_API_KEY", "")
+def _vt_key():      return os.getenv("VIRUSTOTAL_API_KEY", "")
+def _gsb_key():     return os.getenv("GOOGLE_SAFE_BROWSING_API_KEY", "")
+def _abuse_key():   return os.getenv("ABUSEIPDB_API_KEY", "")
+def _urlscan_key(): return os.getenv("URLSCAN_API_KEY", "")
+def _ipqs_key():    return os.getenv("IPQS_API_KEY", "")
 
 _IPQS_EMAIL_URL = "https://ipqualityscore.com/api/json/email/{key}/{email}"
 _IPQS_URL_URL = "https://ipqualityscore.com/api/json/url/{key}/{url}"

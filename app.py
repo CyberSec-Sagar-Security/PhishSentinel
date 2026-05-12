@@ -61,6 +61,10 @@ try:
     from src.ioc_extractor import extract_iocs, generate_ioc_explanations, iocs_to_misp_json, iocs_to_syslog
     from src.attack_mapping import map_attack_techniques
     from src.features.openai_analyzer import analyse_email_with_openai
+    from src.features.intelligence import (
+        enrich_email_with_intelligence,
+        query_ipqs_email, query_ipqs_url, query_ipqs_ip,
+    )
     from src.utils.config import DEFAULT_CONFIG
     from src.utils.logger import get_logger
 except ImportError as _err:
@@ -320,12 +324,12 @@ def render_sidebar() -> Dict:
 
     use_intelligence = st.sidebar.toggle(
         "Threat Intelligence APIs",
-        value=False,
+        value=bool(os.getenv("VIRUSTOTAL_API_KEY")),
         help="Queries VirusTotal, Google Safe Browsing, URLScan, URLhaus, AbuseIPDB, IPQS. Requires API keys in .env.",
     )
     use_chatgpt = st.sidebar.toggle(
         "ChatGPT Analysis (gpt-4.1-mini)",
-        value=False,
+        value=bool(os.getenv("OPENAI_API_KEY")),
         help="Sends forensic context to ChatGPT gpt-4.1-mini. Requires OPENAI_API_KEY.",
     )
     use_shap = st.sidebar.toggle(
@@ -365,12 +369,12 @@ def render_sidebar() -> Dict:
 
 def _show_api_status():
     keys = {
-        "OPENAI_API_KEY":    "ChatGPT",
-        "VT_API_KEY":        "VirusTotal",
-        "GSB_API_KEY":       "Google Safe Browsing",
-        "URLSCAN_API_KEY":   "URLScan.io",
-        "ABUSEIPDB_API_KEY": "AbuseIPDB",
-        "IPQS_API_KEY":      "IPQS",
+        "OPENAI_API_KEY":              "ChatGPT",
+        "VIRUSTOTAL_API_KEY":          "VirusTotal",
+        "GOOGLE_SAFE_BROWSING_API_KEY": "Google Safe Browsing",
+        "URLSCAN_API_KEY":             "URLScan.io",
+        "ABUSEIPDB_API_KEY":           "AbuseIPDB",
+        "IPQS_API_KEY":                "IPQS",
     }
     for env_var, label in keys.items():
         val = os.getenv(env_var, "")
@@ -440,6 +444,221 @@ def render_input_tabs() -> Tuple[Optional[str], Optional[str]]:
             st.info("No sample emails found in `samples eamil/` folder.")
 
     return raw_email, display_name
+
+
+# ── Intelligence display builder ───────────────────────────────────────────────
+def _build_intel_display(raw: Dict, urls: List[str], sender_ip: Optional[str], sender_email: str) -> Dict:
+    """Convert raw intelligence features to a structured display dict."""
+    d: Dict[str, Any] = {}
+
+    # ── VirusTotal ─────────────────────────────────────────────────────────
+    vt_mal = raw.get("vt_malicious", 0) or 0
+    vt_sus = raw.get("vt_suspicious", 0) or 0
+    vt_rep = raw.get("vt_reputation", 0) or 0
+    if vt_mal > 0:
+        d["vt_verdict"] = "MALICIOUS"
+    elif vt_sus > 0:
+        d["vt_verdict"] = "SUSPICIOUS"
+    elif raw.get("vt_malicious", -1) == -1:
+        d["vt_verdict"] = "N/A"
+    else:
+        d["vt_verdict"] = "CLEAN"
+    d["vt_score"] = f"{vt_mal} malicious / {vt_sus} suspicious engines · reputation {vt_rep:+d}"
+
+    # Per-URL VT detail
+    vt_urls = []
+    for i, u in enumerate(urls[:5]):
+        vt_i = raw.get(f"_vt_url_{i}", {})
+        mal_i = vt_i.get("vt_malicious", 0) or 0
+        sus_i = vt_i.get("vt_suspicious", 0) or 0
+        if vt_i:
+            vt_urls.append({"url": u, "malicious": mal_i, "suspicious": sus_i,
+                            "verdict": "MALICIOUS" if mal_i > 0 else "SUSPICIOUS" if sus_i > 0 else "CLEAN"})
+    d["vt_per_url"] = vt_urls
+
+    # ── Google Safe Browsing ───────────────────────────────────────────────
+    gsb_flagged = raw.get("gsb_is_flagged", 0) or 0
+    gsb_count   = raw.get("gsb_threat_count", 0) or 0
+    if gsb_flagged:
+        d["gsb_verdict"] = "MALICIOUS"
+        d["gsb_score"]   = f"Flagged by Google Safe Browsing · {gsb_count} threats detected"
+    elif raw.get("gsb_is_flagged", -1) == -1:
+        d["gsb_verdict"] = "N/A"
+        d["gsb_score"]   = "Not checked"
+    else:
+        d["gsb_verdict"] = "CLEAN"
+        d["gsb_score"]   = "No threats detected"
+
+    # ── URLhaus ────────────────────────────────────────────────────────────
+    uh = raw.get("urlhaus_threat", -1)
+    if uh == 1:
+        d["urlhaus_verdict"] = "MALICIOUS"
+        d["urlhaus_score"]   = "Listed in URLhaus abuse.ch database"
+    elif uh == 0:
+        d["urlhaus_verdict"] = "CLEAN"
+        d["urlhaus_score"]   = "Not listed in URLhaus"
+    else:
+        d["urlhaus_verdict"] = "N/A"
+        d["urlhaus_score"]   = "Not checked"
+
+    # ── URLScan.io ─────────────────────────────────────────────────────────
+    us_mal = raw.get("urlscan_malicious", -1)
+    us_brand = raw.get("urlscan_brand_impersonated", -1)
+    us_0 = raw.get("_us_url_0", {})
+    us_tags = us_0.get("urlscan_tags", []) if isinstance(us_0, dict) else []
+    if us_mal == 1:
+        d["urlscan_verdict"] = "MALICIOUS"
+        d["urlscan_score"]   = f"Flagged as malicious{' · brand impersonation detected' if us_brand == 1 else ''}"
+    elif us_brand == 1:
+        d["urlscan_verdict"] = "SUSPICIOUS"
+        d["urlscan_score"]   = "Brand impersonation detected"
+    elif us_mal == -1:
+        d["urlscan_verdict"] = "N/A"
+        d["urlscan_score"]   = "Not scanned"
+    else:
+        d["urlscan_verdict"] = "CLEAN"
+        d["urlscan_score"]   = "No threats detected"
+
+    # ── AbuseIPDB ──────────────────────────────────────────────────────────
+    abuse_score = raw.get("abuse_confidence_score", -1)
+    abuse_rpts  = raw.get("abuse_total_reports", -1)
+    abuse_tor   = raw.get("abuse_is_tor", -1)
+    if abuse_score == -1:
+        d["abuseipdb_verdict"] = "N/A"
+        d["abuseipdb_score"]   = f"Sender IP: {sender_ip or 'not found'}"
+    elif abuse_score >= 50:
+        d["abuseipdb_verdict"] = "MALICIOUS"
+        d["abuseipdb_score"]   = f"Abuse confidence: {abuse_score}% · {abuse_rpts} reports{' · TOR node' if abuse_tor == 1 else ''}"
+    elif abuse_score >= 20:
+        d["abuseipdb_verdict"] = "SUSPICIOUS"
+        d["abuseipdb_score"]   = f"Abuse confidence: {abuse_score}% · {abuse_rpts} reports"
+    else:
+        d["abuseipdb_verdict"] = "CLEAN"
+        d["abuseipdb_score"]   = f"Abuse confidence: {abuse_score}% · {abuse_rpts} reports"
+
+    # ── IPQS ────────────────────────────────────────────────────────────────
+    ipqs_url_d  = raw.get("_ipqs_url_0", {})
+    ipqs_email_d = raw.get("_ipqs_email", {})
+    ipqs_ip_d   = raw.get("_ipqs_ip", {})
+
+    ipqs_risk  = ipqs_url_d.get("ipqs_url_risk_score", -1) if isinstance(ipqs_url_d, dict) else -1
+    ipqs_phish = ipqs_url_d.get("ipqs_url_phishing", -1) if isinstance(ipqs_url_d, dict) else -1
+    email_fraud = ipqs_email_d.get("ipqs_email_fraud_score", -1) if isinstance(ipqs_email_d, dict) else -1
+    ip_fraud   = ipqs_ip_d.get("ipqs_ip_fraud_score", -1) if isinstance(ipqs_ip_d, dict) else -1
+
+    if ipqs_phish == 1 or ipqs_risk >= 75:
+        d["ipqs_verdict"] = "MALICIOUS"
+        d["ipqs_score"]   = f"URL risk score: {ipqs_risk}/100 · phishing flag: {ipqs_phish == 1}"
+    elif ipqs_risk >= 50 or email_fraud >= 75 or ip_fraud >= 75:
+        d["ipqs_verdict"] = "SUSPICIOUS"
+        parts = []
+        if ipqs_risk >= 50: parts.append(f"URL risk {ipqs_risk}/100")
+        if email_fraud >= 75: parts.append(f"email fraud {email_fraud}/100")
+        if ip_fraud >= 75: parts.append(f"IP fraud {ip_fraud}/100")
+        d["ipqs_score"] = " · ".join(parts)
+    elif ipqs_risk == -1 and email_fraud == -1:
+        d["ipqs_verdict"] = "N/A"
+        d["ipqs_score"]   = "Not checked"
+    else:
+        parts = []
+        if ipqs_risk >= 0: parts.append(f"URL risk {ipqs_risk}/100")
+        if email_fraud >= 0: parts.append(f"email fraud {email_fraud}/100")
+        d["ipqs_verdict"] = "CLEAN"
+        d["ipqs_score"]   = " · ".join(parts) or "No issues detected"
+
+    # ── IOC-level verdicts dict ─────────────────────────────────────────────
+    ioc_verdicts: Dict[str, Dict] = {}
+    for i, url in enumerate(urls[:5]):
+        vt_i = raw.get(f"_vt_url_{i}", {})
+        uh_i = raw.get(f"_uh_url_{i}", {})
+        mal = (vt_i.get("vt_malicious", 0) or 0) > 0 if vt_i else False
+        sus = (vt_i.get("vt_suspicious", 0) or 0) > 0 if vt_i else False
+        uh_threat = (uh_i.get("urlhaus_threat", 0) or 0) == 1 if uh_i else False
+        if mal or uh_threat:
+            verdict_str = "MALICIOUS"
+        elif sus:
+            verdict_str = "SUSPICIOUS"
+        else:
+            verdict_str = "CLEAN"
+        ioc_verdicts[url[:80]] = {"type": "URL", "verdict": verdict_str,
+                                   "score": f"VT: {vt_i.get('vt_malicious',0) or 0}/{(vt_i.get('vt_malicious',0) or 0)+(vt_i.get('vt_clean',0) or 0)} malicious" if vt_i else "",
+                                   "source": "VirusTotal + URLhaus"}
+    if sender_ip and abuse_score != -1:
+        ioc_verdicts[sender_ip] = {
+            "type": "IP",
+            "verdict": d["abuseipdb_verdict"],
+            "score": f"Confidence: {abuse_score}%",
+            "source": "AbuseIPDB",
+        }
+    if sender_email and email_fraud != -1:
+        ioc_verdicts[sender_email] = {
+            "type": "Email",
+            "verdict": "SUSPICIOUS" if email_fraud >= 75 else "CLEAN",
+            "score": f"Fraud score: {email_fraud}/100",
+            "source": "IPQS",
+        }
+    d["ioc_verdicts"] = ioc_verdicts
+
+    return d
+
+
+def _compute_composite_verdict(
+    ml_prob: float,
+    threshold: float,
+    ai_result: Optional[Dict],
+    intel: Dict,
+) -> Tuple[str, float, List[str]]:
+    """Combine ML probability, AI verdict, and TI signals into a final verdict.
+
+    Returns (verdict, adjusted_prob, reasons_list).
+    """
+    adjusted = ml_prob
+    reasons: List[str] = []
+
+    # ── AI signal ──────────────────────────────────────────────────────────
+    if ai_result and "unavailable" not in str(ai_result.get("_ai_provider", "")).lower():
+        ai_phishing = ai_result.get("gemini_is_phishing", -1)
+        ai_conf     = ai_result.get("gemini_confidence", 0.0)
+        if ai_phishing == 1 and ai_conf >= 0.65:
+            boost = ai_conf * 0.25  # up to +0.25
+            adjusted = max(adjusted, ml_prob + boost)
+            reasons.append(f"AI analysis: PHISHING ({ai_conf:.0%} confidence)")
+        elif ai_phishing == 0 and ai_conf >= 0.80:
+            adjusted = min(adjusted, ml_prob - ai_conf * 0.15)
+            reasons.append(f"AI analysis: LEGITIMATE ({ai_conf:.0%} confidence)")
+
+    # ── TI signals ─────────────────────────────────────────────────────────
+    if intel:
+        malicious_hits = 0
+        suspicious_hits = 0
+        for tool_key in ("vt_verdict", "gsb_verdict", "urlhaus_verdict",
+                         "urlscan_verdict", "abuseipdb_verdict", "ipqs_verdict"):
+            v = intel.get(tool_key, "N/A")
+            if v == "MALICIOUS":
+                malicious_hits += 1
+                tool_name = tool_key.replace("_verdict", "").upper()
+                reasons.append(f"TI: {tool_name} flagged as MALICIOUS")
+            elif v == "SUSPICIOUS":
+                suspicious_hits += 1
+
+        if malicious_hits >= 1:
+            # Any confirmed malicious verdict from TI → push probability above threshold
+            boost = min(0.40, 0.20 * malicious_hits)
+            adjusted = max(adjusted, threshold + 0.05 + boost)
+        if suspicious_hits >= 2:
+            adjusted = max(adjusted, threshold - 0.01)
+            reasons.append(f"TI: {suspicious_hits} sources flagged as SUSPICIOUS")
+
+    adjusted = max(0.0, min(1.0, adjusted))
+
+    if adjusted >= threshold:
+        verdict = "PHISHING"
+    elif adjusted >= THRESH_UNCERTAIN:
+        verdict = "UNCERTAIN"
+    else:
+        verdict = "LEGITIMATE"
+
+    return verdict, adjusted, reasons
 
 
 # ── Analysis engine ────────────────────────────────────────────────────────────
@@ -560,6 +779,35 @@ def run_analysis(raw_email: str, config: Dict) -> Dict:
             except Exception:
                 results["attack_techniques"] = []
 
+    # ── Threat Intelligence enrichment (display-level) ─────────────────────
+    if config["use_intelligence"]:
+        with st.spinner("Querying threat intelligence APIs (VT · GSB · URLhaus · URLScan · AbuseIPDB · IPQS)…"):
+            try:
+                urls_for_ti  = (results.get("iocs", {}) or {}).get("urls", [])[:5]
+                sender_ips   = (results.get("iocs", {}) or {}).get("sender_ips", [])
+                sender_ip_ti = sender_ips[0] if sender_ips else None
+                sender_email_ti = parsed.get("from_address", "")
+
+                intel_raw = enrich_email_with_intelligence(urls_for_ti, sender_ip_ti)
+
+                # IPQS enrichment (display-only, not in ML vector)
+                if sender_email_ti:
+                    intel_raw["_ipqs_email"] = query_ipqs_email(sender_email_ti)
+                if urls_for_ti:
+                    intel_raw["_ipqs_url_0"] = query_ipqs_url(urls_for_ti[0])
+                if sender_ip_ti:
+                    intel_raw["_ipqs_ip"] = query_ipqs_ip(sender_ip_ti)
+
+                results["intel"] = _build_intel_display(
+                    intel_raw, urls_for_ti, sender_ip_ti, sender_email_ti
+                )
+                results["intel_raw"] = intel_raw
+            except Exception as exc:
+                log.warning(f"TI enrichment failed: {exc}")
+                results["intel"] = {}
+    else:
+        results["intel"] = {}
+
     # ── ChatGPT forensic analysis ──────────────────────────────────────────
     if config["use_chatgpt"]:
         with st.spinner("Sending forensic context to ChatGPT gpt-4.1-mini…"):
@@ -633,6 +881,18 @@ def run_analysis(raw_email: str, config: Dict) -> Dict:
     else:
         results["shap_df"] = None
 
+    # ── Composite verdict (ML + AI + TI signals) ───────────────────────────
+    final_verdict, final_prob, verdict_reasons = _compute_composite_verdict(
+        ml_prob=results["phishing_prob"],
+        threshold=config["threshold"],
+        ai_result=results.get("ai_result"),
+        intel=results.get("intel", {}),
+    )
+    results["verdict"]         = final_verdict
+    results["phishing_prob"]   = final_prob
+    results["ml_prob_raw"]     = phishing_prob   # preserve original ML score
+    results["verdict_reasons"] = verdict_reasons
+
     return results
 
 
@@ -662,6 +922,7 @@ def render_verdict_banner(results: Dict):
         <p style="color:#4a5568;margin:4px 0 0 0;font-size:0.95rem">
             Phishing probability: <strong style="color:{colour}">{phishing_prob:.1%}</strong>
             &nbsp;·&nbsp; Model: <strong>{model_name}</strong>
+            {f"&nbsp;·&nbsp; <em style='font-size:0.85rem'>ML raw: {results.get('ml_prob_raw', phishing_prob):.1%}</em>" if abs(results.get('ml_prob_raw', phishing_prob) - phishing_prob) > 0.01 else ''}
         </p>
     </div>
     """, unsafe_allow_html=True)
@@ -830,7 +1091,12 @@ def render_chatgpt_analysis(ai_result: Optional[Dict]):
     col1, col2, col3 = st.columns(3)
     col1.metric("AI Verdict", f"{verdict_icon} {'PHISHING' if is_phishing == 1 else 'LEGITIMATE' if is_phishing == 0 else 'UNKNOWN'}")
     col2.metric("AI Confidence", f"{confidence:.0%}")
-    col3.metric("Risk Level", f"<span style='color:{risk_colour};font-weight:bold'>{risk_level}</span>", help=None)
+    with col3:
+        st.markdown("**Risk Level**")
+        st.markdown(
+            f'<span style="color:{risk_colour};font-weight:700;font-size:1.4rem">{risk_level}</span>',
+            unsafe_allow_html=True,
+        )
 
     st.markdown(f"**Recommended Action:** {action_icon} `{action}`")
     if brand:
@@ -893,7 +1159,7 @@ def render_shap(shap_df: Optional[pd.DataFrame]):
         yaxis_title="",
         plot_bgcolor="rgba(0,0,0,0)",
         paper_bgcolor="rgba(0,0,0,0)",
-        font_color="#f0f6fc",
+        font_color="#1a202c",
         height=500,
         margin={"l": 200, "r": 20, "t": 50, "b": 40},
     )
@@ -1279,66 +1545,145 @@ def main():
 
     # ── TAB 4: Threat Intelligence ──────────────────────────────────────────
     with tab_ti:
-        intel = results.get("intel", {})
+        intel     = results.get("intel", {})
         ai_result = results.get("ai_result")
 
-        # Tool-level verdicts
+        # Composite verdict signal explanation
+        verdict_reasons = results.get("verdict_reasons", [])
+        if verdict_reasons:
+            with st.expander("ℹ️ How this verdict was determined", expanded=False):
+                st.markdown("**Scoring factors considered:**")
+                for r in verdict_reasons:
+                    st.markdown(f"- {r}")
+                ml_raw = results.get("ml_prob_raw", results.get("phishing_prob", 0))
+                st.markdown(f"- ML model raw score: **{ml_raw:.1%}**")
+                st.markdown(f"- Final adjusted score: **{results.get('phishing_prob', 0):.1%}**")
+
         TI_TOOLS = [
-            ("VirusTotal",         "vt_",        "🦠"),
-            ("Google Safe Browsing","gsb_",       "🔍"),
-            ("URLhaus",            "urlhaus_",    "🌐"),
-            ("URLScan.io",         "urlscan_",    "🔭"),
-            ("AbuseIPDB",          "abuseipdb_",  "🚫"),
-            ("IPQS",               "ipqs_",       "🔒"),
+            ("VirusTotal",          "vt_",        "🦠"),
+            ("Google Safe Browsing", "gsb_",       "🔍"),
+            ("URLhaus",             "urlhaus_",    "🌐"),
+            ("URLScan.io",          "urlscan_",    "🔭"),
+            ("AbuseIPDB",           "abuseipdb_",  "🚫"),
+            ("IPQS",                "ipqs_",       "🔒"),
         ]
 
+        _VERDICT_COLOURS = {
+            "MALICIOUS":  "#c53030",
+            "SUSPICIOUS": "#c05621",
+            "CLEAN":      "#276749",
+            "N/A":        "#718096",
+        }
+        _VERDICT_BG = {
+            "MALICIOUS":  "#fff5f5",
+            "SUSPICIOUS": "#fffaf0",
+            "CLEAN":      "#f0fff4",
+            "N/A":        "#f7fafc",
+        }
+        _VERDICT_BORDER = {
+            "MALICIOUS":  "#fc8181",
+            "SUSPICIOUS": "#f6ad55",
+            "CLEAN":      "#68d391",
+            "N/A":        "#e2e8f0",
+        }
+        _VERDICT_ICONS = {
+            "MALICIOUS":  "🔴",
+            "SUSPICIOUS": "🟠",
+            "CLEAN":      "🟢",
+            "N/A":        "⚪",
+        }
+
         if intel:
-            st.markdown("### 🌐 Threat Intelligence Tool Verdicts")
+            st.markdown("### 🌐 Threat Intelligence Platform Verdicts")
+
+            # Summary row: count hits
+            mal_tools  = [t for t, p, _ in TI_TOOLS if intel.get(f"{p}verdict") == "MALICIOUS"]
+            sus_tools  = [t for t, p, _ in TI_TOOLS if intel.get(f"{p}verdict") == "SUSPICIOUS"]
+            clean_tools = [t for t, p, _ in TI_TOOLS if intel.get(f"{p}verdict") == "CLEAN"]
+            na_tools   = [t for t, p, _ in TI_TOOLS if intel.get(f"{p}verdict") in ("N/A", None, "")]
+
+            sc1, sc2, sc3, sc4 = st.columns(4)
+            sc1.metric("🔴 Malicious",  len(mal_tools))
+            sc2.metric("🟠 Suspicious", len(sus_tools))
+            sc3.metric("🟢 Clean",      len(clean_tools))
+            sc4.metric("⚪ Not Checked", len(na_tools))
+            st.markdown("")
+
+            # Tool cards — 3 per row
             ti_cols = st.columns(3)
             for idx, (tool_name, prefix, icon) in enumerate(TI_TOOLS):
-                verdict_key = f"{prefix}verdict"
-                score_key   = f"{prefix}score"
-                verdict_val = intel.get(verdict_key, intel.get(tool_name.lower().replace(" ", "_"), "N/A"))
-                score_val   = intel.get(score_key, "")
-                colour = "#d32f2f" if "MALICIOUS" in str(verdict_val).upper() else \
-                         "#f57c00" if "SUSPICIOUS" in str(verdict_val).upper() else \
-                         "#388e3c" if "CLEAN" in str(verdict_val).upper() else "#757575"
+                verdict_val = intel.get(f"{prefix}verdict", "N/A") or "N/A"
+                score_val   = intel.get(f"{prefix}score", "") or ""
+                v_colour = _VERDICT_COLOURS.get(verdict_val, _VERDICT_COLOURS["N/A"])
+                v_bg     = _VERDICT_BG.get(verdict_val, _VERDICT_BG["N/A"])
+                v_border = _VERDICT_BORDER.get(verdict_val, _VERDICT_BORDER["N/A"])
+                v_icon   = _VERDICT_ICONS.get(verdict_val, "⚪")
                 with ti_cols[idx % 3]:
                     st.markdown(
-                        f'<div class="ti-card">'
-                        f'<strong style="color:#1a202c">{icon} {tool_name}</strong><br>'
-                        f'<span style="color:{colour};font-weight:700;font-size:1rem">{verdict_val}</span>'
-                        f'{f"<br><small style=\'color:#718096\'>{score_val}</small>" if score_val else ""}'
+                        f'<div style="background:{v_bg};border:1px solid {v_border};border-radius:10px;'
+                        f'padding:14px 16px;margin-bottom:10px">'
+                        f'<div style="font-weight:700;color:#1a202c;font-size:0.95rem">{icon} {tool_name}</div>'
+                        f'<div style="font-size:1.2rem;font-weight:800;color:{v_colour};margin:6px 0 2px 0">'
+                        f'{v_icon} {verdict_val}</div>'
+                        f'<div style="font-size:0.78rem;color:#4a5568;line-height:1.4">{score_val}</div>'
+                        f'</div>',
+                        unsafe_allow_html=True,
+                    )
+
+            # Per-URL VirusTotal detail
+            vt_per_url = intel.get("vt_per_url", [])
+            if vt_per_url:
+                st.markdown("### 🦠 VirusTotal — Per-URL Detail")
+                for entry in vt_per_url:
+                    u_verdict = entry.get("verdict", "CLEAN")
+                    u_col  = _VERDICT_COLOURS.get(u_verdict, "#718096")
+                    u_bg   = _VERDICT_BG.get(u_verdict, "#f7fafc")
+                    u_brd  = _VERDICT_BORDER.get(u_verdict, "#e2e8f0")
+                    u_icon = _VERDICT_ICONS.get(u_verdict, "⚪")
+                    mal_n  = entry.get("malicious", 0)
+                    sus_n  = entry.get("suspicious", 0)
+                    url_s  = entry["url"][:90] + ("…" if len(entry["url"]) > 90 else "")
+                    st.markdown(
+                        f'<div style="background:{u_bg};border:1px solid {u_brd};border-radius:8px;'
+                        f'padding:10px 14px;margin-bottom:6px">'
+                        f'<div style="font-family:monospace;font-size:0.8rem;color:#2b6cb0;word-break:break-all">{url_s}</div>'
+                        f'<div style="margin-top:4px"><span style="color:{u_col};font-weight:700">{u_icon} {u_verdict}</span>'
+                        f' &nbsp; <small style="color:#4a5568">{mal_n} malicious · {sus_n} suspicious engines</small></div>'
                         f'</div>',
                         unsafe_allow_html=True,
                     )
 
             # Per-IOC verification table
-            st.markdown("### 🔎 Per-IOC Verification")
+            st.markdown("### 🔎 Per-IOC Verdict Summary")
             ioc_verdicts_all = intel.get("ioc_verdicts", {})
             if ioc_verdicts_all:
                 rows = []
                 for ioc_val, ioc_info in ioc_verdicts_all.items():
                     if isinstance(ioc_info, dict):
                         rows.append({
-                            "IOC": ioc_val,
-                            "Type": ioc_info.get("type", ""),
+                            "IOC":     ioc_val,
+                            "Type":    ioc_info.get("type", ""),
                             "Verdict": ioc_info.get("verdict", ""),
-                            "Score": ioc_info.get("score", ""),
-                            "Source": ioc_info.get("source", ""),
+                            "Detail":  ioc_info.get("score", ""),
+                            "Source":  ioc_info.get("source", ""),
                         })
                     else:
-                        rows.append({"IOC": ioc_val, "Type": "", "Verdict": str(ioc_info), "Score": "", "Source": ""})
+                        rows.append({"IOC": ioc_val, "Type": "", "Verdict": str(ioc_info), "Detail": "", "Source": ""})
                 if rows:
-                    ioc_df = pd.DataFrame(rows)
-                    st.dataframe(ioc_df, use_container_width=True, hide_index=True)
+                    df = pd.DataFrame(rows)
+                    # Colour the Verdict column via dataframe styling
+                    def _colour_verdict(val):
+                        c = _VERDICT_COLOURS.get(str(val).upper(), "#4a5568")
+                        return f"color: {c}; font-weight: 600"
+                    styled = df.style.applymap(_colour_verdict, subset=["Verdict"])
+                    st.dataframe(styled, use_container_width=True, hide_index=True)
         else:
             st.info(
                 "Threat Intelligence not enabled. Toggle **Threat Intelligence APIs** in the sidebar, "
                 "then re-run the analysis."
             )
 
-        # ChatGPT IOC verdicts (if available)
+        # ChatGPT IOC verdicts
         if ai_result:
             ioc_verdicts_ai = ai_result.get("gemini_ioc_verdicts", {})
             if ioc_verdicts_ai:
@@ -1347,8 +1692,11 @@ def main():
                     colour = "#c53030" if "MALICIOUS" in str(verdict_v).upper() else \
                              "#c05621" if "SUSPICIOUS" in str(verdict_v).upper() else \
                              "#276749" if "CLEAN" in str(verdict_v).upper() else "#4a5568"
+                    v_icon = "🔴" if "MALICIOUS" in str(verdict_v).upper() else \
+                             "🟠" if "SUSPICIOUS" in str(verdict_v).upper() else \
+                             "🟢" if "CLEAN" in str(verdict_v).upper() else "⚪"
                     st.markdown(
-                        f'`{ioc_v}` → <span style="color:{colour};font-weight:600">{verdict_v}</span>',
+                        f'`{ioc_v}` → <span style="color:{colour};font-weight:600">{v_icon} {verdict_v}</span>',
                         unsafe_allow_html=True,
                     )
 
