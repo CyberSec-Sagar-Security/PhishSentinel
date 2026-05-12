@@ -34,12 +34,12 @@ from src.utils.logger import get_logger
 
 log = get_logger(__name__)
 
-# API keys loaded from environment (set via .env or Streamlit secrets)
-_VT_KEY = os.getenv("VIRUSTOTAL_API_KEY", "")
-_GSB_KEY = os.getenv("GOOGLE_SAFE_BROWSING_API_KEY", "")
-_ABUSEIPDB_KEY = os.getenv("ABUSEIPDB_API_KEY", "")
-_URLSCAN_KEY = os.getenv("URLSCAN_API_KEY", "")
-_IPQS_KEY = os.getenv("IPQS_API_KEY", "")
+# API keys loaded lazily at call time (dotenv may be loaded after module import)
+def _vt_key()():    return os.getenv("VIRUSTOTAL_API_KEY", "")
+def _gsb_key()():   return os.getenv("GOOGLE_SAFE_BROWSING_API_KEY", "")
+def _abuse_key(): return os.getenv("ABUSEIPDB_API_KEY", "")
+def _urlscan_key()(): return os.getenv("URLSCAN_API_KEY", "")
+def _ipqs_key()():  return os.getenv("IPQS_API_KEY", "")
 
 _IPQS_EMAIL_URL = "https://ipqualityscore.com/api/json/email/{key}/{email}"
 _IPQS_URL_URL = "https://ipqualityscore.com/api/json/url/{key}/{url}"
@@ -66,13 +66,13 @@ def query_virustotal(url: str, timeout: int = NETWORK_TIMEOUT) -> Dict:
         Dict with vt_malicious, vt_suspicious, vt_clean, vt_reputation.
         Returns -1 values on API failure.
     """
-    if not _VT_KEY:
+    if not _vt_key():
         log.debug("VirusTotal API key not configured — skipping VT lookup.")
         return _default_vt_features()
 
     try:
         url_id = base64.urlsafe_b64encode(url.encode()).decode().strip("=")
-        headers = {"x-apikey": _VT_KEY}
+        headers = {"x-apikey": _vt_key()}
         resp = requests.get(
             API_ENDPOINTS["virustotal_url"].format(url_id=url_id),
             headers=headers,
@@ -104,10 +104,10 @@ def query_virustotal(url: str, timeout: int = NETWORK_TIMEOUT) -> Dict:
 
 def _submit_url_to_virustotal(url: str) -> None:
     """Submit a new URL to VirusTotal for analysis (fire-and-forget)."""
-    if not _VT_KEY:
+    if not _vt_key():
         return
     try:
-        headers = {"x-apikey": _VT_KEY, "content-type": "application/x-www-form-urlencoded"}
+        headers = {"x-apikey": _vt_key(), "content-type": "application/x-www-form-urlencoded"}
         requests.post(
             API_ENDPOINTS["virustotal_submit"],
             headers=headers,
@@ -124,10 +124,10 @@ def _default_vt_features() -> Dict:
 
 def query_virustotal_domain(domain: str, timeout: int = NETWORK_TIMEOUT) -> Dict:
     """Query VirusTotal API v3 for domain reputation."""
-    if not _VT_KEY or not domain:
+    if not _vt_key() or not domain:
         return _default_vt_features()
     try:
-        headers = {"x-apikey": _VT_KEY}
+        headers = {"x-apikey": _vt_key()}
         resp = requests.get(
             f"https://www.virustotal.com/api/v3/domains/{domain}",
             headers=headers,
@@ -171,7 +171,7 @@ def query_google_safe_browsing(urls: List[str], timeout: int = NETWORK_TIMEOUT) 
     Returns:
         Dict with gsb_is_flagged (1 if any URL matches), gsb_threat_count.
     """
-    if not _GSB_KEY:
+    if not _gsb_key():
         log.debug("Google Safe Browsing API key not configured — skipping GSB check.")
         return {"gsb_is_flagged": -1, "gsb_threat_count": -1}
 
@@ -196,7 +196,7 @@ def query_google_safe_browsing(urls: List[str], timeout: int = NETWORK_TIMEOUT) 
     try:
         resp = requests.post(
             API_ENDPOINTS["google_safe_browsing"],
-            params={"key": _GSB_KEY},
+            params={"key": _gsb_key()},
             json=payload,
             timeout=timeout,
         )
@@ -238,7 +238,7 @@ def query_abuseipdb(ip_address: str, timeout: int = NETWORK_TIMEOUT) -> Dict:
     Returns:
         Dict with abuse_confidence_score, total_reports, is_tor, country_code, isp.
     """
-    if not _ABUSEIPDB_KEY:
+    if not _abuse_key():
         log.debug("AbuseIPDB API key not configured — skipping IP reputation check.")
         return _default_abuseipdb_features()
 
@@ -247,7 +247,7 @@ def query_abuseipdb(ip_address: str, timeout: int = NETWORK_TIMEOUT) -> Dict:
 
     try:
         headers = {
-            "Key": _ABUSEIPDB_KEY,
+            "Key": _abuse_key(),
             "Accept": "application/json",
         }
         params = {
@@ -320,14 +320,14 @@ def query_urlscan(url: str, timeout: int = NETWORK_TIMEOUT) -> Dict:
         Dict with urlscan_malicious, urlscan_brand_impersonated,
         urlscan_redirect_count.
     """
-    if not _URLSCAN_KEY:
+    if not _urlscan_key():
         log.debug("URLScan.io API key not configured — skipping URLScan lookup.")
         return _default_urlscan_features()
 
     try:
         import urllib.parse
         query = urllib.parse.quote(f'page.url:"{url}"')
-        headers = {"API-Key": _URLSCAN_KEY, "Content-Type": "application/json"}
+        headers = {"API-Key": _urlscan_key(), "Content-Type": "application/json"}
         resp = requests.get(
             f"{API_ENDPOINTS['urlscan_search']}?q={query}&size=1",
             headers=headers,
@@ -513,12 +513,12 @@ def query_ipqs_email(email_address: str, timeout: int = NETWORK_TIMEOUT) -> Dict
         "ipqs_email_deliverability": "unknown",
         "ipqs_email_dns_valid": -1,
     }
-    if not _IPQS_KEY or not email_address:
+    if not _ipqs_key() or not email_address:
         return _default
     try:
         import urllib.parse
         url = _IPQS_EMAIL_URL.format(
-            key=_IPQS_KEY,
+            key=_ipqs_key(),
             email=urllib.parse.quote(email_address, safe=""),
         )
         params = {"timeout": 7, "fast": "true", "abuse_strictness": 1}
@@ -572,12 +572,12 @@ def query_ipqs_url(url: str, timeout: int = NETWORK_TIMEOUT) -> Dict:
         "ipqs_url_short_link_redirect": -1,
         "ipqs_url_spamming": -1,
     }
-    if not _IPQS_KEY or not url:
+    if not _ipqs_key() or not url:
         return _default
     try:
         import urllib.parse
         encoded_url = urllib.parse.quote(url, safe="")
-        req_url = _IPQS_URL_URL.format(key=_IPQS_KEY, url=encoded_url)
+        req_url = _IPQS_URL_URL.format(key=_ipqs_key(), url=encoded_url)
         params = {"strictness": 1, "allow_public_access_points": "true", "fast": "false"}
         resp = requests.get(req_url, params=params, timeout=timeout)
         if resp.status_code == 200:
@@ -631,12 +631,12 @@ def query_ipqs_ip(ip_address: str, timeout: int = NETWORK_TIMEOUT) -> Dict:
         "ipqs_ip_isp": "unknown",
         "ipqs_ip_connection_type": "unknown",
     }
-    if not _IPQS_KEY or not ip_address:
+    if not _ipqs_key() or not ip_address:
         return _default
     if _is_private_ip(ip_address):
         return _default
     try:
-        req_url = _IPQS_IP_URL.format(key=_IPQS_KEY, ip=ip_address)
+        req_url = _IPQS_IP_URL.format(key=_ipqs_key(), ip=ip_address)
         params = {"strictness": 1, "allow_public_access_points": "true"}
         resp = requests.get(req_url, params=params, timeout=timeout)
         if resp.status_code == 200:

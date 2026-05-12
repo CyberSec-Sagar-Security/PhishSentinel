@@ -25,6 +25,16 @@ import joblib
 import numpy as np
 import pandas as pd
 import streamlit as st
+from dotenv import load_dotenv
+
+# ── Load .env before anything else (API keys) ────────────────────────────────
+# The .env file lives in phishlens/ subfolder
+_ENV_FILE = Path(__file__).parent / "phishlens" / ".env"
+if _ENV_FILE.exists():
+    load_dotenv(dotenv_path=_ENV_FILE, override=True)
+else:
+    # Fallback: try .env in repo root
+    load_dotenv(override=True)
 
 # ── Streamlit page config must be first ──────────────────────────────────────
 st.set_page_config(
@@ -104,56 +114,89 @@ ACTION_ICONS = {
 # ── CSS ───────────────────────────────────────────────────────────────────────
 st.markdown("""
 <style>
-/* Dashboard header */
-.phishlens-header {
-    background: linear-gradient(135deg, #0d1117 0%, #161b22 60%, #1f2937 100%);
-    border: 1px solid #30363d;
-    border-radius: 12px;
-    padding: 24px 32px;
-    margin-bottom: 24px;
-}
-.phishlens-header h1 { color: #f0f6fc; margin: 0; font-size: 2rem; }
-.phishlens-header p  { color: #8b949e; margin: 6px 0 0 0; font-size: 0.95rem; }
+/* ── Global: clean white main area ─────────────────────────────────────────── */
+.main .block-container { background: #ffffff; }
 
-/* Verdict banner */
-.verdict-phishing   { background:#3d0000; border:2px solid #d32f2f; border-radius:10px; padding:16px 24px; }
-.verdict-legitimate { background:#003d00; border:2px solid #388e3c; border-radius:10px; padding:16px 24px; }
-.verdict-uncertain  { background:#3d2e00; border:2px solid #fbc02d; border-radius:10px; padding:16px 24px; }
-.verdict-phishing h2, .verdict-legitimate h2, .verdict-uncertain h2 {
-    margin: 0; font-size: 1.6rem;
+/* ── Verdict banner ─────────────────────────────────────────────────────────── */
+.verdict-phishing {
+    background: #fff5f5;
+    border-left: 5px solid #e53e3e;
+    border-radius: 8px;
+    padding: 16px 24px;
+    margin-bottom: 12px;
 }
+.verdict-legitimate {
+    background: #f0fff4;
+    border-left: 5px solid #38a169;
+    border-radius: 8px;
+    padding: 16px 24px;
+    margin-bottom: 12px;
+}
+.verdict-uncertain {
+    background: #fffbeb;
+    border-left: 5px solid #d69e2e;
+    border-radius: 8px;
+    padding: 16px 24px;
+    margin-bottom: 12px;
+}
+.verdict-phishing h2   { margin:0; font-size:1.5rem; color:#c53030; }
+.verdict-legitimate h2 { margin:0; font-size:1.5rem; color:#276749; }
+.verdict-uncertain h2  { margin:0; font-size:1.5rem; color:#975a16; }
 
-/* IOC pill */
+/* ── IOC pill ────────────────────────────────────────────────────────────────── */
 .ioc-pill {
     display: inline-block;
-    background: #21262d;
-    border: 1px solid #30363d;
-    border-radius: 6px;
-    padding: 2px 10px;
-    font-size: 0.82rem;
+    background: #edf2f7;
+    border: 1px solid #cbd5e0;
+    border-radius: 4px;
+    padding: 2px 8px;
+    font-size: 0.8rem;
     font-family: monospace;
     margin: 2px;
-    color: #79c0ff;
+    color: #2b6cb0;
     word-break: break-all;
 }
 
-/* Attack technique card */
+/* ── ATT&CK technique card ──────────────────────────────────────────────────── */
 .att-card {
-    background: #161b22;
-    border: 1px solid #30363d;
-    border-radius: 8px;
+    background: #f7fafc;
+    border: 1px solid #e2e8f0;
+    border-left: 4px solid #4299e1;
+    border-radius: 6px;
     padding: 12px 16px;
     margin-bottom: 8px;
 }
-.att-card .tid   { color: #79c0ff; font-weight: bold; font-family: monospace; }
-.att-card .tname { color: #f0f6fc; font-size: 0.9rem; }
-.att-card .ttac  { color: #8b949e; font-size: 0.8rem; }
+.att-card .tid   { color: #2b6cb0; font-weight: bold; font-family: monospace; }
+.att-card .tname { color: #1a202c; font-size: 0.92rem; }
+.att-card .ttac  { color: #718096; font-size: 0.8rem; }
 
-/* Feature bar */
-.feat-bar-container { background:#21262d; border-radius:4px; overflow:hidden; height:10px; }
-.feat-bar-fill      { height:10px; border-radius:4px; transition:width .3s; }
+/* ── Finding card ────────────────────────────────────────────────────────────── */
+.finding-card {
+    background: #f7fafc;
+    border: 1px solid #e2e8f0;
+    border-radius: 6px;
+    padding: 10px 16px;
+    margin-bottom: 6px;
+}
 
-/* ── Dark Sidebar ─────────────────────────────────────────────────────────── */
+/* ── Feature bar ─────────────────────────────────────────────────────────────── */
+.feat-bar-container { background:#e2e8f0; border-radius:4px; overflow:hidden; height:8px; }
+.feat-bar-fill      { height:8px; border-radius:4px; transition:width .3s; }
+
+/* ── Section header ──────────────────────────────────────────────────────────── */
+h3 { color: #1a202c !important; border-bottom: 1px solid #e2e8f0; padding-bottom: 6px; }
+
+/* ── TI tool card ────────────────────────────────────────────────────────────── */
+.ti-card {
+    background: #f7fafc;
+    border: 1px solid #e2e8f0;
+    border-radius: 8px;
+    padding: 12px 16px;
+    margin-bottom: 8px;
+    text-align: center;
+}
+
+/* ── Dark Sidebar (kept dark per design) ────────────────────────────────────── */
 [data-testid="stSidebar"] {
     background: #0d1117 !important;
     border-right: 1px solid #30363d !important;
@@ -163,43 +206,24 @@ st.markdown("""
 [data-testid="stSidebar"] .stMarkdown,
 [data-testid="stSidebar"] .stCaption,
 [data-testid="stSidebar"] span:not([data-testid="stMetricDelta"]),
-[data-testid="stSidebar"] div {
-    color: #c9d1d9 !important;
-}
+[data-testid="stSidebar"] div { color: #c9d1d9 !important; }
 [data-testid="stSidebar"] h1,
 [data-testid="stSidebar"] h2,
 [data-testid="stSidebar"] h3,
-[data-testid="stSidebar"] h4 {
-    color: #e6edf3 !important;
-}
+[data-testid="stSidebar"] h4 { color: #e6edf3 !important; }
 [data-testid="stSidebar"] .stTextInput input {
-    background: #161b22 !important;
-    border-color: #30363d !important;
-    color: #c9d1d9 !important;
+    background: #161b22 !important; border-color: #30363d !important; color: #c9d1d9 !important;
 }
 [data-testid="stSidebar"] [data-baseweb="select"] > div {
-    background: #161b22 !important;
-    border-color: #30363d !important;
-    color: #c9d1d9 !important;
+    background: #161b22 !important; border-color: #30363d !important; color: #c9d1d9 !important;
 }
-[data-testid="stSidebar"] [data-baseweb="slider"] div[role="slider"] {
-    background: #58a6ff !important;
-}
-[data-testid="stSidebar"] .stSlider > div > div > div {
-    background: #30363d !important;
-}
+[data-testid="stSidebar"] [data-baseweb="slider"] div[role="slider"] { background: #58a6ff !important; }
+[data-testid="stSidebar"] .stSlider > div > div > div { background: #30363d !important; }
 [data-testid="stSidebar"] hr { border-color: #30363d !important; }
 [data-testid="stSidebar"] .stToggle label { color: #c9d1d9 !important; }
 [data-testid="stSidebar"] .stSelectbox label { color: #8b949e !important; }
 [data-testid="stSidebar"] .stTextInput label { color: #8b949e !important; }
 [data-testid="stSidebar"] .stSlider label { color: #8b949e !important; }
-[data-testid="stSidebar"] [data-testid="stMetric"] {
-    background: #161b22 !important;
-    border: 1px solid #30363d !important;
-    border-radius: 6px !important;
-    padding: 8px 12px !important;
-}
-[data-testid="stSidebar"] [data-testid="stMetricValue"] { color: #58a6ff !important; }
 </style>
 """, unsafe_allow_html=True)
 
@@ -619,23 +643,23 @@ def _detect_model_type(model_name: str) -> str:
 
 # ── Result renderers ──────────────────────────────────────────────────────────
 def render_verdict_banner(results: Dict):
-    verdict      = results["verdict"]
+    verdict       = results["verdict"]
     phishing_prob = results["phishing_prob"]
-    model_name   = results["model_name"]
+    model_name    = results["model_name"]
 
     css_class = {
-        "PHISHING": "verdict-phishing",
+        "PHISHING":   "verdict-phishing",
         "LEGITIMATE": "verdict-legitimate",
-        "UNCERTAIN": "verdict-uncertain",
+        "UNCERTAIN":  "verdict-uncertain",
     }.get(verdict, "verdict-uncertain")
 
-    icon = {"PHISHING": "🚨", "LEGITIMATE": "✅", "UNCERTAIN": "⚠️"}.get(verdict, "❓")
-    colour = {"PHISHING": "#ff6b6b", "LEGITIMATE": "#69db7c", "UNCERTAIN": "#ffd43b"}.get(verdict, "#adb5bd")
+    icon   = {"PHISHING": "🚨", "LEGITIMATE": "✅", "UNCERTAIN": "⚠️"}.get(verdict, "❓")
+    colour = {"PHISHING": "#c53030", "LEGITIMATE": "#276749", "UNCERTAIN": "#975a16"}.get(verdict, "#4a5568")
 
     st.markdown(f"""
     <div class="{css_class}">
-        <h2 style="color:{colour}">{icon} {verdict}</h2>
-        <p style="color:#ccc;margin:4px 0 0 0">
+        <h2>{icon} {verdict}</h2>
+        <p style="color:#4a5568;margin:4px 0 0 0;font-size:0.95rem">
             Phishing probability: <strong style="color:{colour}">{phishing_prob:.1%}</strong>
             &nbsp;·&nbsp; Model: <strong>{model_name}</strong>
         </p>
@@ -758,7 +782,7 @@ def render_attack_techniques(techniques: List[Dict]):
 
     for tech in techniques:
         conf_pct = int(tech.get("confidence", 0) * 100)
-        conf_bar_colour = "#d32f2f" if conf_pct >= 70 else ("#f57c00" if conf_pct >= 40 else "#fbc02d")
+        conf_bar_colour = "#e53e3e" if conf_pct >= 70 else ("#ed8936" if conf_pct >= 40 else "#ecc94b")
         evidence_str = "; ".join(tech.get("evidence", []))
         mitre_url = tech.get("mitre_url", f"https://attack.mitre.org/techniques/{tech.get('technique_id', '')}/")
 
@@ -768,11 +792,11 @@ def render_attack_techniques(techniques: List[Dict]):
                 <a href="{mitre_url}" target="_blank" class="tid">{tech.get('technique_id', '')}</a>
                 <span class="tname"> — {tech.get('technique_name', '')}</span>
             </div>
-            <div class="ttac">Tactic: {tech.get('tactic', '')} · Confidence: {conf_pct}%</div>
+            <div class="ttac">Tactic: {tech.get('tactic', '')} &nbsp;·&nbsp; Confidence: {conf_pct}%</div>
             <div class="feat-bar-container" style="margin-top:6px">
                 <div class="feat-bar-fill" style="width:{conf_pct}%;background:{conf_bar_colour}"></div>
             </div>
-            <div style="color:#8b949e;font-size:0.78rem;margin-top:4px">{evidence_str}</div>
+            <div style="color:#718096;font-size:0.78rem;margin-top:4px">{evidence_str}</div>
         </div>
         """, unsafe_allow_html=True)
 
@@ -829,11 +853,11 @@ def render_chatgpt_analysis(ai_result: Optional[Dict]):
     if ioc_verdicts:
         st.markdown("**IOC Verdicts:**")
         for ioc, verdict in ioc_verdicts.items():
-            colour = "#d32f2f" if "MALICIOUS" in str(verdict).upper() else \
-                     "#f57c00" if "SUSPICIOUS" in str(verdict).upper() else \
-                     "#388e3c" if "CLEAN" in str(verdict).upper() else "#757575"
+            colour = "#c53030" if "MALICIOUS" in str(verdict).upper() else \
+                     "#c05621" if "SUSPICIOUS" in str(verdict).upper() else \
+                     "#276749" if "CLEAN" in str(verdict).upper() else "#4a5568"
             st.markdown(
-                f'`{ioc}` → <span style="color:{colour};font-weight:bold">{verdict}</span>',
+                f'`{ioc}` → <span style="color:{colour};font-weight:600">{verdict}</span>',
                 unsafe_allow_html=True,
             )
 
@@ -1077,10 +1101,10 @@ def main():
                 f'<div style="text-align:center;padding:18px 0 6px 0">'
                 f'<div style="font-size:3rem;font-weight:900;color:{gauge_colour};line-height:1">{prob:.1%}</div>'
                 f'<div style="font-size:1rem;color:{gauge_colour};font-weight:700;margin-top:6px;letter-spacing:1px">{gauge_label}</div>'
-                f'<div style="margin:12px auto 0 auto;height:10px;border-radius:5px;background:#21262d;max-width:320px;overflow:hidden">'
+                f'<div style="margin:12px auto 0 auto;height:10px;border-radius:5px;background:#e2e8f0;max-width:320px;overflow:hidden">'
                 f'<div style="width:{bar_pct}%;height:100%;background:{gauge_colour};border-radius:5px;transition:width .4s"></div>'
                 f'</div>'
-                f'<div style="color:#8b949e;font-size:0.8rem;margin-top:4px">Phishing Probability · threshold {config["threshold"]:.0%}</div>'
+                f'<div style="color:#718096;font-size:0.8rem;margin-top:4px">Phishing Probability · threshold {config["threshold"]:.0%}</div>'
                 f'</div>',
                 unsafe_allow_html=True,
             )
@@ -1107,9 +1131,9 @@ def main():
                 detail = finding.get("detail", "")
                 colour = RISK_COLOURS.get(sev, RISK_COLOURS["UNKNOWN"])
                 st.markdown(
-                    f'<div style="border-left:3px solid {colour};padding:6px 12px;margin:4px 0;background:#161b22;border-radius:0 6px 6px 0">'
+                    f'<div class="finding-card" style="border-left:4px solid {colour}">'
                     f'<strong style="color:{colour}">{icon} [{sev}] {title}</strong><br>'
-                    f'<small style="color:#8b949e">{detail}</small></div>',
+                    f'<small style="color:#718096">{detail}</small></div>',
                     unsafe_allow_html=True,
                 )
 
@@ -1125,11 +1149,11 @@ def main():
                 colour = RISK_COLOURS.get(sev, RISK_COLOURS["UNKNOWN"])
                 flags_str = " · ".join(flags) if flags else "—"
                 st.markdown(
-                    f'<div style="border-left:3px solid {colour};padding:6px 12px;margin:4px 0;background:#161b22;border-radius:0 6px 6px 0">'
+                    f'<div class="finding-card" style="border-left:4px solid {colour}">'
                     f'<strong style="color:{colour}">[{sev}]</strong> '
                     f'<span class="ioc-pill">{addr}</span> '
-                    f'<small style="color:#8b949e">({addr_type})</small><br>'
-                    f'<small style="color:#8b949e">{flags_str}</small></div>',
+                    f'<small style="color:#4a5568">({addr_type})</small><br>'
+                    f'<small style="color:#718096">{flags_str}</small></div>',
                     unsafe_allow_html=True,
                 )
 
@@ -1144,9 +1168,9 @@ def main():
                 detail = hf.get("detail", "")
                 colour = RISK_COLOURS.get(sev, RISK_COLOURS["UNKNOWN"])
                 st.markdown(
-                    f'<div style="border-left:3px solid {colour};padding:6px 12px;margin:4px 0;background:#161b22;border-radius:0 6px 6px 0">'
+                    f'<div class="finding-card" style="border-left:4px solid {colour}">'
                     f'<strong style="color:{colour}">{icon} [{sev}] {title}</strong><br>'
-                    f'<small style="color:#8b949e">{detail}</small></div>',
+                    f'<small style="color:#718096">{detail}</small></div>',
                     unsafe_allow_html=True,
                 )
 
@@ -1162,10 +1186,10 @@ def main():
                 colour = RISK_COLOURS.get(sev, RISK_COLOURS["UNKNOWN"])
                 risks_str = " · ".join(risks) if risks else "—"
                 st.markdown(
-                    f'<div style="border-left:3px solid {colour};padding:6px 12px;margin:4px 0;background:#161b22;border-radius:0 6px 6px 0">'
+                    f'<div class="finding-card" style="border-left:4px solid {colour}">'
                     f'<strong style="color:{colour}">[{sev}]</strong> '
                     f'<span class="ioc-pill">{url[:100]}{"…" if len(url) > 100 else ""}</span><br>'
-                    f'<small style="color:#8b949e">Domain: {domain} · {risks_str}</small></div>',
+                    f'<small style="color:#718096">Domain: {domain} · {risks_str}</small></div>',
                     unsafe_allow_html=True,
                 )
 
@@ -1281,10 +1305,10 @@ def main():
                          "#388e3c" if "CLEAN" in str(verdict_val).upper() else "#757575"
                 with ti_cols[idx % 3]:
                     st.markdown(
-                        f'<div style="background:#161b22;border:1px solid #30363d;border-radius:8px;padding:10px 14px;margin-bottom:8px">'
-                        f'<strong style="color:#e6edf3">{icon} {tool_name}</strong><br>'
-                        f'<span style="color:{colour};font-weight:bold">{verdict_val}</span>'
-                        f'{f"<small style=\'color:#8b949e\'> ({score_val})</small>" if score_val else ""}'
+                        f'<div class="ti-card">'
+                        f'<strong style="color:#1a202c">{icon} {tool_name}</strong><br>'
+                        f'<span style="color:{colour};font-weight:700;font-size:1rem">{verdict_val}</span>'
+                        f'{f"<br><small style=\'color:#718096\'>{score_val}</small>" if score_val else ""}'
                         f'</div>',
                         unsafe_allow_html=True,
                     )
@@ -1320,11 +1344,11 @@ def main():
             if ioc_verdicts_ai:
                 st.markdown("### 🤖 ChatGPT IOC Verdicts")
                 for ioc_v, verdict_v in ioc_verdicts_ai.items():
-                    colour = "#d32f2f" if "MALICIOUS" in str(verdict_v).upper() else \
-                             "#f57c00" if "SUSPICIOUS" in str(verdict_v).upper() else \
-                             "#388e3c" if "CLEAN" in str(verdict_v).upper() else "#757575"
+                    colour = "#c53030" if "MALICIOUS" in str(verdict_v).upper() else \
+                             "#c05621" if "SUSPICIOUS" in str(verdict_v).upper() else \
+                             "#276749" if "CLEAN" in str(verdict_v).upper() else "#4a5568"
                     st.markdown(
-                        f'`{ioc_v}` → <span style="color:{colour};font-weight:bold">{verdict_v}</span>',
+                        f'`{ioc_v}` → <span style="color:{colour};font-weight:600">{verdict_v}</span>',
                         unsafe_allow_html=True,
                     )
 
